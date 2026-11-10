@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>帳本 · 記帳與分帳</title>
+<meta name="theme-color" content="#2f6b4f">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+// 方式一：直接填在這裡；方式二：留空，開啟網頁後在設定畫面貼上（存在瀏覽器 localStorage）
+window.SUPABASE_CONFIG = { url: '', key: '' };
+</script>
+<style type="text/tailwindcss">
+  body{font-family:'Noto Sans TC',sans-serif;background:#f6f1e7;color:#1f2a24;-webkit-tap-highlight-color:transparent}
+  .serif{font-family:'Noto Serif TC',serif}
+  .num{font-variant-numeric:tabular-nums}
+  .card{@apply bg-[#fffdf8] rounded-xl border border-[#e3dac8] p-3}
+  .in{@apply w-full border border-[#d9cfbb] bg-white rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#2f6b4f]}
+  .btn{@apply bg-[#2f6b4f] text-white rounded-lg px-3 py-2 text-sm font-medium active:opacity-80}
+  .ghost{@apply border border-[#d9cfbb] rounded-lg px-3 py-2 text-sm bg-white}
+  .lbl{@apply block text-xs text-[#6b6a5e] mb-1}
+  .tear{border-top:1.5px dashed #cdc2aa}
+  .chip{@apply px-2.5 py-1 rounded-full text-xs border border-[#d9cfbb] bg-white}
+  .chip.on{@apply bg-[#1f2a24] text-white border-[#1f2a24]}
+</style>
+</head>
+<body>
+<div id="app" class="max-w-md mx-auto min-h-screen px-3 pt-3 pb-24"></div>
+<nav id="nav" class="hidden fixed bottom-0 inset-x-0 bg-[#fffdf8] border-t border-[#e3dac8] pb-[env(safe-area-inset-bottom)]"><div class="max-w-md mx-auto grid grid-cols-4 text-xs" id="tabs"></div></nav>
+<div id="modal" class="hidden fixed inset-0 z-40 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onclick="if(event.target===this)closeModal()"><div id="sheet" class="bg-[#fffdf8] w-full max-w-md rounded-t-2xl sm:rounded-2xl p-4 max-h-[90vh] overflow-y-auto"></div></div>
+<div id="toast" class="fixed top-3 left-1/2 -translate-x-1/2 z-50 text-sm px-3 py-2 rounded-lg text-white hidden"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const CATS = {food:'🍜 餐飲', transport:'✈️ 交通', hotel:'🏨 住宿', tickets:'🎫 門票', shopping:'🛍️ 購物', other:'📦 其他'};
+const MODES = {normal:'均分（付款人也分攤）', payer_excluded:'代墊（付款人不分攤）', self:'自行負擔（不分帳）'};
+const BUCKET = 'ledger-images';
+let sb, user, ledgers = [], L = null, ex = [], sh = [], cf = [], tab = 'ex', fcat = 'ALL', sf = 'all', chart, ch, urls = {};
+
+/* ---------- 工具 ---------- */
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+const rate = () => +L.jpy_rate || 0;
+const dc = () => L.display_currency;
+const conv = (a, f, t) => f === t ? a : !rate() ? NaN : f === 'JPY' ? a * rate() : a / rate();
+const fmt = (n, c) => (c === 'JPY' ? '¥' : 'NT$ ') + (c === 'JPY' ? Math.round(n) : Math.round(n * 100) / 100).toLocaleString('zh-TW');
+const nick = () => (user.user_metadata && user.user_metadata.nickname) || user.email.split('@')[0];
+const isOwner = () => L && L.owner_id === user.id;
+function toast(m, bad) { const t = $('#toast'); t.textContent = m; t.className = 'fixed top-3 left-1/2 -translate-x-1/2 z-50 text-sm px-3 py-2 rounded-lg text-white ' + (bad ? 'bg-[#c8452d]' : 'bg-[#2f6b4f]'); setTimeout(() => t.classList.add('hidden'), 2600); }
+function openModal(h) { $('#sheet').innerHTML = h; $('#modal').classList.remove('hidden'); }
+function closeModal() { $('#modal').classList.add('hidden'); }
+function sumStr(list, div = 1) {            // 依結算幣別加總；SPLIT 則台幣、日圓各算各的
+  if (dc() === 'SPLIT') {
+    const p = ['TWD', 'JPY'].map(c => [c, list.filter(e => e.currency === c).reduce((s, e) => s + +e.amount, 0) / div]).filter(x => x[1] > 0).map(([c, n]) => fmt(n, c));
+    return p.join(' ＋ ') || fmt(0, 'TWD');
+  }
+  const t = list.reduce((s, e) => s + conv(+e.amount, e.currency, dc()), 0) / div;
+  return isNaN(t) ? '需設定匯率' : fmt(t, dc());
+}
+
+/* ---------- 啟動與登入 ---------- */
+function cfg() { const c = window.SUPABASE_CONFIG || {}; return { url: c.url || localStorage.getItem('sb_url') || '', key: c.key || localStorage.getItem('sb_key') || '' }; }
+async function init() {
+  const c = cfg();
+  if (!c.url || !c.key) return viewConfig();
+  sb = supabase.createClient(c.url, c.key);
+  const { data } = await sb.auth.getSession();
+  user = data.session && data.session.user;
+  sb.auth.onAuthStateChange((_e, s) => { const u = s && s.user; if ((u && u.id) !== (user && user.id)) { user = u; user ? loadLedgers() : viewAuth(); } });
+  user ? loadLedgers() : viewAuth();
+}
+function viewConfig() {
+  $('#nav').classList.add('hidden');
+  $('#app').innerHTML = `<div class="pt-10 space-y-3"><h1 class="serif text-2xl">連接 Supabase</h1>
+  <p class="text-sm text-[#6b6a5e]">先依 supabase_setup.sql 開頭的步驟建立專案，再貼上 Project URL 與 anon / publishable key。</p>
+  <form class="card space-y-2" onsubmit="saveCfg(event)"><div><label class="lbl">Project URL</label><input name="u" class="in" placeholder="https://xxxx.supabase.co" required></div>
+  <div><label class="lbl">anon / publishable key</label><input name="k" class="in" required></div><button class="btn w-full">儲存並開始</button></form></div>`;
+}
+function saveCfg(e) { e.preventDefault(); const f = new FormData(e.target); localStorage.setItem('sb_url', f.get('u').trim()); localStorage.setItem('sb_key', f.get('k').trim()); location.reload(); }
+function viewAuth(signup) {
+  $('#nav').classList.add('hidden');
+  $('#app').innerHTML = `<div class="pt-12 space-y-4"><div><h1 class="serif text-3xl">帳本</h1><p class="text-sm text-[#6b6a5e] mt-1">記帳、分帳、購物清單，多人即時同步</p></div>
+  <form class="card space-y-2" onsubmit="auth(event,${!!signup})">
+  ${signup ? '<div><label class="lbl">暱稱（分帳時顯示的名字）</label><input name="nick" class="in" required></div>' : ''}
+  <div><label class="lbl">Email</label><input name="email" type="email" class="in" required></div>
+  <div><label class="lbl">密碼（至少 6 碼）</label><input name="pw" type="password" minlength="6" class="in" required></div>
+  <button class="btn w-full">${signup ? '註冊' : '登入'}</button></form>
+  <div class="flex justify-between text-sm"><button class="underline" onclick="viewAuth(${!signup})">${signup ? '已有帳號？登入' : '沒有帳號？註冊'}</button><button class="underline text-[#6b6a5e]" onclick="localStorage.removeItem('sb_url');localStorage.removeItem('sb_key');location.reload()">更換 Supabase 設定</button></div></div>`;
+}
+async function auth(e, signup) {
+  e.preventDefault(); const f = new FormData(e.target), email = f.get('email').trim(), password = f.get('pw');
+  const r = signup ? await sb.auth.signUp({ email, password, options: { data: { nickname: f.get('nick').trim() } } }) : await sb.auth.signInWithPassword({ email, password });
+  if (r.error) return toast(r.error.message, 1);
+  if (signup && !r.data.session) { toast('註冊成功，請到信箱完成驗證後登入'); viewAuth(); }
+}
+
+/* ---------- 帳本列表 ---------- */
+async function loadLedgers() {
+  const { data, error } = await sb.from('ledgers').select('*').order('created_at', { ascending: false });
+  if (error) return toast(error.message, 1);
+  ledgers = data; viewHome();
+}
+function viewHome() {
+  L = null; if (ch) { sb.removeChannel(ch); ch = null; } $('#nav').classList.add('hidden');
+  $('#app').innerHTML = `<div class="flex items-center justify-between py-2"><h1 class="serif text-2xl">我的帳本</h1><button class="ghost" onclick="sb.auth.signOut()">${esc(nick())} · 登出</button></div>
+  <div class="space-y-2 mt-2">${ledgers.map(l => `<button class="card w-full text-left" onclick="openLedger('${l.id}')"><div class="serif text-lg">${esc(l.title)}</div><div class="text-xs text-[#6b6a5e] mt-0.5">${l.members.length} 位成員${+l.budget ? ' · 預算 ' + fmt(l.budget, 'TWD') : ''}${l.owner_id === user.id ? '' : ' · 共編'}</div></button>`).join('') || '<p class="text-sm text-[#6b6a5e] py-6 text-center">還沒有帳本，先建立一個吧</p>'}</div>
+  <form class="card mt-4 space-y-2" onsubmit="newLedger(event)"><div class="serif">新增帳本</div><input name="t" class="in" placeholder="例：京都旅行 / 家用 / 室友" required>
+  <input name="b" type="number" min="0" class="in" placeholder="預算（台幣，可留空）"><button class="btn w-full">建立</button></form>`;
+}
+async function newLedger(e) {
+  e.preventDefault(); const f = new FormData(e.target);
+  const { data, error } = await sb.from('ledgers').insert({ title: f.get('t').trim(), budget: +f.get('b') || 0, members: [nick()] }).select().single();
+  if (error) return toast(error.message, 1);
+  ledgers.unshift(data); openLedger(data.id);
+}
+async function openLedger(id) {
+  L = ledgers.find(l => l.id === id); tab = 'ex'; fcat = 'ALL'; sf = 'all'; urls = {};
+  if (ch) sb.removeChannel(ch);
+  ch = sb.channel('l' + id); ['expenses', 'shopping_items', 'settlements'].forEach(t => ch.on('postgres_changes', { event: '*', schema: 'public', table: t, filter: 'ledger_id=eq.' + id }, load));
+  ch.subscribe(); $('#nav').classList.remove('hidden'); await load();
+}
+async function load() {
+  if (!L) return; const q = t => sb.from(t).select('*').eq('ledger_id', L.id);
+  const [a, b, c] = await Promise.all([q('expenses').order('spent_on', { ascending: false }).order('created_at', { ascending: false }), q('shopping_items').order('created_at'), q('settlements')]);
+  ex = a.data || []; sh = b.data || []; cf = c.data || [];
+  const need = sh.filter(i => i.image_path && !urls[i.image_path]).map(i => i.image_path);
+  if (need.length) { const { data } = await sb.storage.from(BUCKET).createSignedUrls(need, 3600); (data || []).forEach(d => d.signedUrl && (urls[d.path] = d.signedUrl)); }
+  render();
+}
+function setTab(t) { tab = t; render(); window.scrollTo(0, 0); }
+function render() {
+  if (!L) return; if (chart) { chart.destroy(); chart = null; }
+  const tabs = [['ex', '📒', '花費'], ['st', '⚖️', '結算'], ['sh', '🛍️', '購物'], ['cfg', '⚙️', '設定']];
+  $('#tabs').innerHTML = tabs.map(([k, i, n]) => `<button onclick="setTab('${k}')" class="py-2 ${tab === k ? 'text-[#2f6b4f] font-bold' : 'text-[#6b6a5e]'}"><div class="text-lg leading-none">${i}</div>${n}</button>`).join('');
+  $('#app').innerHTML = `<div class="flex items-center gap-2 py-2"><button class="ghost !px-2" onclick="viewHome()">‹</button><h1 class="serif text-xl truncate">${esc(L.title)}</h1></div>` + { ex: viewEx, st: viewSt, sh: viewSh, cfg: viewCfg }[tab]();
+  if (tab === 'ex') drawChart(); if (tab === 'cfg') loadCollab();
+}
+
+/* ---------- 花費 ---------- */
+function viewEx() {
+  const all = ex, list = all.filter(e => fcat === 'ALL' || e.category === fcat), n = L.members.length || 1;
+  let remain = '無預算';
+  if (+L.budget) { const t = all.reduce((s, e) => s + conv(+e.amount, e.currency, 'TWD'), 0); remain = isNaN(t) ? '需設定匯率' : fmt(L.budget - t, 'TWD'); }
+  return `<div class="grid grid-cols-3 gap-2 text-center">${[['總支出', sumStr(all)], ['剩餘預算', remain], ['人均', sumStr(all, n)]].map(([a, b]) => `<div class="card !p-2"><div class="text-[11px] text-[#6b6a5e]">${a}</div><div class="num text-sm font-bold mt-0.5 break-words">${b}</div></div>`).join('')}</div>
+  <div class="card mt-2"><div class="relative h-52"><canvas id="pie"></canvas></div><div id="bars" class="space-y-1 text-xs mt-2"></div></div>
+  <div class="flex items-center justify-between mt-3 mb-1.5"><div class="flex gap-1.5 overflow-x-auto">${['ALL', ...Object.keys(CATS)].map(k => `<button class="chip whitespace-nowrap ${fcat === k ? 'on' : ''}" onclick="fcat='${k}';render()">${k === 'ALL' ? '全部' : CATS[k]}</button>`).join('')}</div>
+  <button class="btn !py-1.5 ml-2 whitespace-nowrap" onclick="expForm()">＋ 記一筆</button></div>
+  <div class="card !p-0 divide-y divide-dashed divide-[#cdc2aa]">${list.map(e => `<button class="w-full text-left p-3 flex justify-between gap-2" onclick="expForm('${e.id}')"><div class="min-w-0"><div class="text-sm truncate">${CATS[e.category]?.slice(0, 2) || '📦'} ${esc(e.title)}</div><div class="text-[11px] text-[#6b6a5e]">${e.spent_on} · ${esc(e.payer)} 付${e.split_mode === 'self' ? ' · 自行負擔' : e.split_mode === 'payer_excluded' ? ' · 代墊' : ''}</div></div><div class="num text-sm font-bold whitespace-nowrap">${fmt(e.amount, e.currency)}</div></button>`).join('') || '<p class="text-center text-sm text-[#6b6a5e] py-6">沒有紀錄</p>'}</div>`;
+}
+function drawChart() {
+  const c = dc() === 'JPY' ? 'JPY' : 'TWD', by = {};
+  ex.filter(e => fcat === 'ALL' || e.category === fcat).forEach(e => { const v = conv(+e.amount, e.currency, c); if (!isNaN(v)) by[e.category] = (by[e.category] || 0) + v; });
+  const keys = Object.keys(by), tot = keys.reduce((s, k) => s + by[k], 0), col = ['#2f6b4f', '#c8452d', '#d9a441', '#4a7c9b', '#8a5a83', '#8a8a7a'];
+  if (!tot) { $('#bars').innerHTML = '<p class="text-center text-[#6b6a5e]">尚無可統計的支出</p>'; return; }
+  chart = new Chart($('#pie'), { type: 'doughnut', data: { labels: keys.map(k => CATS[k] || k), datasets: [{ data: keys.map(k => by[k]), backgroundColor: keys.map((_, i) => col[i % 6]), borderWidth: 0 }] }, options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { display: false } } } });
+  $('#bars').innerHTML = keys.sort((a, b) => by[b] - by[a]).map((k, i) => `<div class="flex justify-between"><span>${CATS[k] || k}</span><span class="num">${fmt(by[k], c)} · ${Math.round(by[k] / tot * 100)}%</span></div>`).join('') + (dc() === 'SPLIT' ? '<p class="text-[#6b6a5e]">圖表以台幣換算，僅供參考</p>' : '');
+}
+function partsBox(parts) { return `<div class="flex flex-wrap gap-x-4 gap-y-1.5">${L.members.map(m => `<label class="text-sm flex items-center gap-1"><input type="checkbox" name="p" value="${esc(m)}" ${parts.includes(m) ? 'checked' : ''} class="accent-[#2f6b4f]">${esc(m)}</label>`).join('')}</div>`; }
+const opts = (o, v) => Object.entries(o).map(([k, t]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${t}</option>`).join('');
+const payerSel = p => `<select name="payer" class="in" required><option value="">付款人</option>${L.members.map(m => `<option ${m === p ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>`;
+function expForm(id) {
+  if (!L.members.length) return toast('請先到「設定」新增成員', 1);
+  const e = ex.find(x => x.id === id) || {};
+  openModal(`<form class="space-y-2.5" onsubmit="saveExp(event,'${id || ''}')"><h3 class="serif text-lg">${id ? '編輯花費' : '記一筆'}</h3>
+  <input name="title" class="in" placeholder="項目名稱" value="${esc(e.title)}" required>
+  <div class="flex gap-2"><input name="amount" type="number" step="any" min="0.01" class="in" placeholder="金額" value="${e.amount ?? ''}" required><select name="currency" class="in !w-24"><option value="TWD">台幣</option><option value="JPY" ${e.currency === 'JPY' ? 'selected' : ''}>日圓</option></select></div>
+  <div class="flex gap-2"><input name="date" type="date" class="in" value="${e.spent_on || today()}" required><select name="category" class="in">${opts(CATS, e.category || 'food')}</select></div>
+  ${payerSel(e.payer)}<select name="mode" class="in">${opts(MODES, e.split_mode || 'normal')}</select>
+  <div><label class="lbl">分攤成員</label>${partsBox(e.participants || L.members)}</div>
+  <div class="flex gap-2"><button class="btn flex-1">儲存</button>${id ? `<button type="button" class="ghost text-[#c8452d]" onclick="delExp('${id}')">刪除</button>` : ''}</div></form>`);
+}
+async function saveExp(ev, id) {
+  ev.preventDefault(); const f = new FormData(ev.target);
+  const row = { ledger_id: L.id, title: f.get('title').trim(), amount: +f.get('amount'), currency: f.get('currency'), spent_on: f.get('date'), category: f.get('category'), payer: f.get('payer'), split_mode: f.get('mode'), participants: f.getAll('p') };
+  if (row.currency === 'JPY' && dc() !== 'SPLIT' && !rate()) return toast('含日圓花費，請先到設定頁設定匯率', 1);
+  if (row.split_mode !== 'self' && !row.participants.length) return toast('請至少勾選一位分攤成員', 1);
+  const { error } = id ? await sb.from('expenses').update(row).eq('id', id) : await sb.from('expenses').insert(row);
+  if (error) return toast(error.message, 1); closeModal(); load();
+}
+async function delExp(id) { if (!confirm('確定刪除這筆花費？')) return; const { error } = await sb.from('expenses').delete().eq('id', id); if (error) return toast(error.message, 1); closeModal(); load(); }
+
+/* ---------- 結算 ---------- */
+function transfers(list, c) {
+  const net = {};
+  list.forEach(e => {
+    if (e.split_mode === 'self' || !e.payer) return;
+    const t = Math.round(conv(+e.amount, e.currency, c) * 100); if (!(t > 0)) return;
+    let p = [...new Set((e.participants || []).filter(Boolean))];
+    if (e.split_mode === 'payer_excluded') p = p.filter(x => x !== e.payer); else if (!p.includes(e.payer)) p.push(e.payer);
+    if (!p.length) return;
+    net[e.payer] = (net[e.payer] || 0) + t;
+    const b = Math.floor(t / p.length); let r = t - b * p.length;       // 全程以「分」計算，餘數依序分配
+    p.forEach(n => { net[n] = (net[n] || 0) - b - (r-- > 0 ? 1 : 0); });
+  });
+  const d = [], k = [], out = [];
+  Object.entries(net).forEach(([n, v]) => { if (v < 0) d.push([n, -v]); else if (v > 0) k.push([n, v]); });
+  d.sort((a, b) => b[1] - a[1]); k.sort((a, b) => b[1] - a[1]);
+  for (let i = 0, j = 0; i < d.length && j < k.length;) { const m = Math.min(d[i][1], k[j][1]); out.push({ from: d[i][0], to: k[j][0], cents: m, cur: c }); d[i][1] -= m; k[j][1] -= m; if (!d[i][1]) i++; if (!k[j][1]) j++; }
+  return out;
+}
+function viewSt() {
+  const groups = dc() === 'SPLIT' ? ['TWD', 'JPY'].map(c => [c, ex.filter(e => e.currency === c)]) : [[dc(), ex]];
+  if (dc() !== 'SPLIT' && !rate() && ex.some(e => e.currency !== dc())) return '<div class="card text-sm">帳目含不同幣別，請先到「設定」輸入匯率，或把結算幣別改為「分開計算」。</div>';
+  return groups.map(([c, list]) => {
+    const ts = transfers(list, c), has = (k, r) => cf.some(x => x.key === k && x.role === r);
+    return `<div class="card mb-3"><div class="serif mb-2">${c === 'JPY' ? '日圓' : '台幣'}結算建議</div>` + (ts.map(t => {
+      const k = JSON.stringify([t.from, t.to, t.cents, c]), box = (r, l) => `<label class="flex items-center gap-1"><input type="checkbox" class="accent-[#2f6b4f]" data-k="${esc(k)}" data-r="${r}" ${has(k, r) ? 'checked' : ''} onchange="toggleCf(this)">${l}</label>`, done = has(k, 'paid') && has(k, 'received');
+      return `<div class="tear py-2 ${done ? 'opacity-50' : ''}"><div class="flex justify-between text-sm"><span>${esc(t.from)} → ${esc(t.to)}</span><span class="num font-bold">${fmt(t.cents / 100, c)}</span></div><div class="flex gap-4 text-xs text-[#6b6a5e] mt-1">${box('paid', '已付款')}${box('received', '已收款')}${done ? '<span class="text-[#2f6b4f]">✓ 已結清</span>' : ''}</div></div>`;
+    }).join('') || '<p class="text-sm text-[#6b6a5e]">目前沒有待結算款項 🎉</p>') + '</div>';
+  }).join('') + '<p class="text-xs text-[#6b6a5e]">金額或幣別變動後，舊的確認紀錄會自動失效。</p>';
+}
+async function toggleCf(el) {
+  const row = { ledger_id: L.id, key: el.dataset.k, role: el.dataset.r };
+  const { error } = el.checked ? await sb.from('settlements').insert(row) : await sb.from('settlements').delete().match(row);
+  if (error) toast(error.message, 1); load();
+}
+
+/* ---------- 購物計劃 ---------- */
+function viewSh() {
+  const todo = sh.filter(i => !i.bought), list = sh.filter(i => sf === 'all' || (sf === 'todo' ? !i.bought : i.bought));
+  return `<div class="flex items-center justify-between mb-2"><div class="text-sm">未購買 ${todo.length} 項 · 預計 <b class="num">${sumStr(todo.map(i => ({ amount: i.amount, currency: i.currency })))}</b></div><button class="btn !py-1.5" onclick="shForm()">＋ 新增</button></div>
+  <div class="flex gap-1.5 mb-2">${[['all', '全部'], ['todo', '未購買'], ['done', '已購買']].map(([k, n]) => `<button class="chip flex-1 ${sf === k ? 'on' : ''}" onclick="sf='${k}';render()">${n}</button>`).join('')}</div>
+  <div class="space-y-2">${list.map(i => `<div class="card flex gap-2.5 items-center ${i.bought ? 'opacity-60' : ''}"><input type="checkbox" class="w-5 h-5 accent-[#2f6b4f]" ${i.bought ? 'checked' : ''} onchange="setBought('${i.id}',this)">
+  <button class="flex-1 min-w-0 text-left flex gap-2.5 items-center" onclick="shForm('${i.id}')">${i.image_path && urls[i.image_path] ? `<img src="${urls[i.image_path]}" class="w-14 h-14 rounded-lg object-cover flex-shrink-0">` : '<div class="w-14 h-14 rounded-lg bg-[#ece4d2] flex items-center justify-center text-xl flex-shrink-0">🛍️</div>'}
+  <div class="min-w-0"><div class="text-sm ${i.bought ? 'line-through' : ''} truncate">${esc(i.name)}${+i.qty > 1 ? ' ×' + i.qty : ''}</div><div class="text-[11px] text-[#6b6a5e] truncate">${esc(i.place || '未填地點')}${i.planned_on ? ' · ' + i.planned_on : ''}</div><div class="num text-sm font-bold">${fmt(i.amount, i.currency)}</div></div></button></div>`).join('') || '<p class="text-center text-sm text-[#6b6a5e] py-8">清單是空的</p>'}</div>`;
+}
+function shForm(id) {
+  const i = sh.find(x => x.id === id) || {};
+  openModal(`<form class="space-y-2.5" onsubmit="saveSh(event,'${id || ''}')"><h3 class="serif text-lg">${id ? '編輯購物項目' : '新增購物項目'}</h3>
+  <input name="name" class="in" placeholder="物品名稱" value="${esc(i.name)}" required>
+  <div class="grid grid-cols-3 gap-2"><input name="price" type="number" step="any" min="0" class="in" placeholder="單價" value="${i.price ?? ''}" oninput="shAuto(this.form)"><input name="qty" type="number" step="any" min="0.01" class="in" placeholder="數量" value="${i.qty ?? 1}" oninput="shAuto(this.form)"><select name="currency" class="in"><option value="TWD">台幣</option><option value="JPY" ${i.currency === 'JPY' ? 'selected' : ''}>日圓</option></select></div>
+  <div><label class="lbl">金額（預設 = 單價 × 數量，可手動改）</label><input name="amount" type="number" step="any" min="0" class="in" value="${i.amount ?? ''}" oninput="this.dataset.d=1"></div>
+  <div class="grid grid-cols-2 gap-2"><input name="place" class="in" placeholder="購買地點" value="${esc(i.place)}"><input name="date" type="date" class="in" value="${i.planned_on || ''}"></div>
+  <div><label class="lbl">照片（自動壓縮後存到雲端）</label><input name="img" type="file" accept="image/*" class="in !p-1.5 text-xs"></div>
+  <div class="flex gap-2"><button class="btn flex-1">儲存</button>${id ? `<button type="button" class="ghost text-[#c8452d]" onclick="delSh('${id}')">刪除</button>` : ''}</div></form>`);
+}
+function shAuto(f) { const a = f.amount; if (a.dataset.d) return; const v = (+f.price.value || 0) * (+f.qty.value || 0); a.value = v ? Math.round(v * 100) / 100 : ''; }
+async function compress(file) { const b = await createImageBitmap(file), s = Math.min(1, 1280 / Math.max(b.width, b.height)), c = document.createElement('canvas'); c.width = b.width * s; c.height = b.height * s; c.getContext('2d').drawImage(b, 0, 0, c.width, c.height); return new Promise(r => c.toBlob(r, 'image/jpeg', .8)); }
+async function saveSh(ev, id) {
+  ev.preventDefault(); const f = new FormData(ev.target), old = sh.find(x => x.id === id), btn = ev.target.querySelector('.btn'); btn.disabled = true;
+  const row = { ledger_id: L.id, name: f.get('name').trim(), price: +f.get('price') || 0, qty: +f.get('qty') || 1, currency: f.get('currency'), amount: +f.get('amount') || 0, place: f.get('place').trim(), planned_on: f.get('date') || null };
+  const file = f.get('img');
+  if (file && file.size) {
+    const path = L.id + '/' + crypto.randomUUID() + '.jpg', { error } = await sb.storage.from(BUCKET).upload(path, await compress(file), { contentType: 'image/jpeg' });
+    if (error) { btn.disabled = false; return toast('照片上傳失敗：' + error.message, 1); }
+    row.image_path = path; if (old && old.image_path) sb.storage.from(BUCKET).remove([old.image_path]);
+  }
+  const { error } = id ? await sb.from('shopping_items').update(row).eq('id', id) : await sb.from('shopping_items').insert(row);
+  if (error) { btn.disabled = false; return toast(error.message, 1); }
+  if (old && old.expense_id) await sb.from('expenses').update({ title: row.name + (row.qty > 1 ? ' ×' + row.qty : ''), amount: row.amount, currency: row.currency }).eq('id', old.expense_id);   // 已購買項目：花費以購物項目為準
+  closeModal(); load();
+}
+async function delSh(id) {
+  const i = sh.find(x => x.id === id); if (!confirm(i.bought ? `刪除「${i.name}」？對應的花費也會一併刪除。` : `刪除「${i.name}」？`)) return;
+  const { error } = await sb.from('shopping_items').delete().eq('id', id); if (error) return toast(error.message, 1);
+  if (i.image_path) sb.storage.from(BUCKET).remove([i.image_path]); closeModal(); load();
+}
+async function setBought(id, el) {
+  const i = sh.find(x => x.id === id);
+  if (el.checked) {
+    if (!(+i.amount > 0)) { el.checked = false; return toast('金額需大於 0 才能加入花費', 1); }
+    if (!L.members.length) { el.checked = false; return toast('請先到「設定」新增成員', 1); }
+    el.checked = false;
+    return openModal(`<form class="space-y-2.5" onsubmit="buy(event,'${id}')"><h3 class="serif text-lg">買到了：${esc(i.name)}</h3><p class="text-sm text-[#6b6a5e]">會自動新增一筆 ${fmt(i.amount, i.currency)} 的花費</p>
+    <input name="date" type="date" class="in" value="${today()}" required>${payerSel(nick())}<select name="mode" class="in">${opts(MODES, 'self')}</select>
+    <div><label class="lbl">分攤成員</label>${partsBox(L.members)}</div><button class="btn w-full">確認並記帳</button></form>`);
+  }
+  if (i.expense_id && !confirm('取消「已購買」會一併刪除對應的花費，確定嗎？')) return render();
+  const { error } = i.expense_id ? await sb.from('expenses').delete().eq('id', i.expense_id) : await sb.from('shopping_items').update({ bought: false }).eq('id', id);
+  if (error) toast(error.message, 1); load();
+}
+async function buy(ev, id) {
+  ev.preventDefault(); const f = new FormData(ev.target), i = sh.find(x => x.id === id), mode = f.get('mode'), parts = f.getAll('p');
+  if (i.currency === 'JPY' && dc() !== 'SPLIT' && !rate()) return toast('含日圓花費，請先到設定頁設定匯率', 1);
+  if (mode !== 'self' && !parts.length) return toast('請至少勾選一位分攤成員', 1);
+  const { data, error } = await sb.from('expenses').insert({ ledger_id: L.id, title: i.name + (+i.qty > 1 ? ' ×' + i.qty : ''), amount: i.amount, currency: i.currency, spent_on: f.get('date'), category: 'shopping', payer: f.get('payer'), split_mode: mode, participants: mode === 'self' ? [f.get('payer')] : parts, shopping_id: id }).select('id').single();
+  if (error) return toast(error.message, 1);
+  await sb.from('shopping_items').update({ bought: true, expense_id: data.id }).eq('id', id); closeModal(); load();
+}
+
+/* ---------- 設定 ---------- */
+function viewCfg() {
+  return `<form class="card space-y-2.5" onsubmit="saveCfgLedger(event)"><div class="serif">帳本設定</div>
+  <div><label class="lbl">名稱</label><input name="t" class="in" value="${esc(L.title)}" required></div>
+  <div><label class="lbl">預算（台幣，0 = 無預算）</label><input name="b" type="number" min="0" class="in" value="${L.budget}"></div>
+  <div><label class="lbl">分帳成員（逗號分隔，可包含沒有帳號的人）</label><input name="m" class="in" value="${esc(L.members.join(', '))}"></div>
+  <div><label class="lbl">結算幣別</label><select name="d" class="in"><option value="TWD" ${dc() === 'TWD' ? 'selected' : ''}>台幣</option><option value="JPY" ${dc() === 'JPY' ? 'selected' : ''}>日圓</option><option value="SPLIT" ${dc() === 'SPLIT' ? 'selected' : ''}>分開計算（不換算）</option></select></div>
+  <div><label class="lbl">匯率：1 日圓 = ? 台幣</label><div class="flex gap-2"><input name="r" type="number" step="any" min="0" class="in" value="${L.jpy_rate ?? ''}"><button type="button" class="ghost whitespace-nowrap" onclick="autoRate(this.form)">自動取得</button></div></div>
+  <button class="btn w-full">儲存設定</button></form>
+  <div class="card mt-3"><div class="serif mb-2">共編者</div><div id="collab" class="text-sm space-y-1 mb-2">載入中…</div>${isOwner() ? `<form class="flex gap-2" onsubmit="addCollab(event)"><input name="e" type="email" class="in" placeholder="對方註冊的 Email" required><button class="btn whitespace-nowrap">邀請</button></form>` : ''}</div>
+  <div class="flex gap-2 mt-3"><button class="ghost flex-1" onclick="exportCsv()">匯出 CSV</button>${isOwner() ? '<button class="ghost flex-1 text-[#c8452d]" onclick="delLedger()">刪除帳本</button>' : ''}</div>`;
+}
+async function saveCfgLedger(e) {
+  e.preventDefault(); const f = new FormData(e.target);
+  const row = { title: f.get('t').trim(), budget: +f.get('b') || 0, members: [...new Set(f.get('m').split(/[,，]/).map(s => s.trim()).filter(Boolean))], display_currency: f.get('d'), jpy_rate: +f.get('r') || null };
+  const { data, error } = await sb.from('ledgers').update(row).eq('id', L.id).select().single();
+  if (error) return toast(error.message, 1); Object.assign(L, data); toast('已儲存'); render();
+}
+async function autoRate(f) {
+  try { const j = await (await fetch('https://open.er-api.com/v6/latest/JPY')).json(); if (!(j.rates && j.rates.TWD)) throw 0; f.r.value = j.rates.TWD; toast('已填入市場參考匯率，記得儲存'); }
+  catch (e) { toast('取得匯率失敗，請手動輸入', 1); }
+}
+async function loadCollab() {
+  const { data, error } = await sb.rpc('ledger_collaborators', { lid: L.id }), box = $('#collab'); if (!box) return;
+  box.innerHTML = error ? esc(error.message) : data.map(u => `<div class="flex justify-between"><span>${esc(u.nickname || '')} <span class="text-[#6b6a5e]">${esc(u.email)}</span></span>${isOwner() && u.user_id !== user.id ? `<button class="text-[#c8452d]" onclick="rmCollab('${u.user_id}')">移除</button>` : u.user_id === L.owner_id ? '<span class="text-xs text-[#6b6a5e]">擁有者</span>' : ''}</div>`).join('');
+}
+async function addCollab(e) { e.preventDefault(); const { error } = await sb.rpc('add_collaborator', { lid: L.id, mail: new FormData(e.target).get('e') }); if (error) return toast(error.message, 1); toast('已加入共編'); e.target.reset(); loadCollab(); }
+async function rmCollab(uid) { if (!confirm('移除這位共編者？')) return; const { error } = await sb.rpc('remove_collaborator', { lid: L.id, uid }); if (error) return toast(error.message, 1); loadCollab(); }
+async function delLedger() {
+  if (prompt(`刪除後無法復原。請輸入帳本名稱「${L.title}」確認：`) !== L.title) return;
+  const { data } = await sb.storage.from(BUCKET).list(L.id); if (data && data.length) await sb.storage.from(BUCKET).remove(data.map(f => L.id + '/' + f.name));
+  const { error } = await sb.from('ledgers').delete().eq('id', L.id); if (error) return toast(error.message, 1);
+  ledgers = ledgers.filter(l => l.id !== L.id); viewHome();
+}
+function exportCsv() {
+  const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"', rows = [['日期', '項目', '分類', '金額', '幣別', '付款人', '分帳模式', '分攤成員']].concat(ex.map(e => [e.spent_on, e.title, CATS[e.category] || e.category, e.amount, e.currency, e.payer, MODES[e.split_mode], (e.participants || []).join('/')]));
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.map(r => r.map(q).join(',')).join('\n')], { type: 'text/csv' })); a.download = L.title + '.csv'; a.click();
+}
+init();
+</script>
+</body>
+</html>
