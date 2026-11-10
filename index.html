@@ -7,6 +7,10 @@
 <meta name="theme-color" content="#d97706">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="帳本">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -35,9 +39,12 @@ window.SUPABASE_CONFIG = { url: 'https://ihjvmuagdzjewspuydsu.supabase.co', key:
     <div class="bg-amber-500 text-white w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm shadow-sm flex-shrink-0"><i class="fa-solid fa-wallet"></i></div>
     <div class="min-w-0"><h1 id="h-title" class="text-xs font-bold truncate text-slate-900">帳本</h1><p id="h-sub" class="text-[9px] text-slate-500">點擊返回首頁</p></div>
   </div>
+  <div class="flex items-center gap-1.5 flex-shrink-0 text-xs">
+  <button id="h-install" onclick="installApp()" class="hidden bg-amber-500 hover:bg-amber-600 text-white px-2 py-1 rounded-lg font-bold shadow-sm"><i class="fa-solid fa-download mr-1"></i>安裝</button>
   <div id="h-btns" class="hidden items-center gap-1.5 flex-shrink-0 text-xs">
     <button onclick="goHome()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg border border-slate-200 font-bold"><i class="fa-solid fa-house text-amber-600 mr-1"></i>首頁</button>
     <button onclick="acctModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 p-1.5 rounded-lg border border-slate-200 relative" title="帳號"><i class="fa-solid fa-user-circle text-emerald-600"></i><span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500"></span></button>
+  </div>
   </div>
 </header>
 
@@ -59,7 +66,7 @@ const MODE_SHORT = {normal:'均分', payer_excluded:'代墊', self:'自付'};
 const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6', '#64748b'];
 const BUCKET = 'ledger-images';
 const EB = 'btn bg-emerald-600', PB = 'btn bg-pink-600';
-let sb, user, collab = [], smode = 'pair', ledgers = [], L = null, ex = [], sh = [], cf = [], tab = 'ex', fd = 'ALL', fcat = 'ALL', fp = 'ALL', sf = 'all', chart, ch, urls = {};
+let sb, user, collab = [], ledgers = [], L = null, ex = [], sh = [], cf = [], tab = 'ex', fd = 'ALL', fcat = 'ALL', fp = 'ALL', sf = 'all', chart, ch, urls = {};
 
 /* ---------- 工具 ---------- */
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
@@ -131,6 +138,7 @@ async function auth(e, signup) {
 function acctModal() {
   openModal('雲端帳號', `<div class="space-y-3"><div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5"><p class="font-bold text-slate-800">${esc(nick())}</p><p class="text-[10px] text-slate-500">${esc(user.email)}</p></div>
   <p class="text-[10px] text-slate-500"><i class="fa-solid fa-circle text-emerald-500 text-[8px] mr-1"></i>已連線，資料會即時同步給共編者</p>
+  ${standalone() ? '' : `<button class="btn bg-amber-500" onclick="installApp()"><i class="fa-solid fa-download mr-1"></i>安裝到主畫面</button>`}
   <button class="btn bg-slate-700" onclick="sb.auth.signOut();closeModal()">登出</button>
   <button class="w-full text-slate-400 underline text-[10px]" onclick="localStorage.removeItem('sb_url');localStorage.removeItem('sb_key');location.reload()">清除本機的 Supabase 設定</button></div>`, 'user-circle');
 }
@@ -239,24 +247,6 @@ async function saveExp(ev, id) {
 async function delExp(id) { if (!confirm('確定刪除這筆花費？')) return; const { error } = await sb.from('expenses').delete().eq('id', id); if (error) return toast(error.message, 1); load(); }
 
 /* ---------- 結算與還款確認 ---------- */
-function transfers(list, c) {                   // 最少轉帳
-  const net = {};
-  list.forEach(e => {
-    if (e.split_mode === 'self' || !e.payer) return;
-    const t = Math.round(conv(+e.amount, e.currency, c) * 100); if (!(t > 0)) return;
-    let p = [...new Set((e.participants || []).filter(Boolean))];
-    if (e.split_mode === 'payer_excluded') p = p.filter(x => x !== e.payer); else if (!p.includes(e.payer)) p.push(e.payer);
-    if (!p.length) return;
-    net[e.payer] = (net[e.payer] || 0) + t;
-    const b = Math.floor(t / p.length); let r = t - b * p.length;       // 全程以「分」計算，餘數依序分配
-    p.forEach(n => { net[n] = (net[n] || 0) - b - (r-- > 0 ? 1 : 0); });
-  });
-  const d = [], k = [], out = [];
-  Object.entries(net).forEach(([n, v]) => { if (v < 0) d.push([n, -v]); else if (v > 0) k.push([n, v]); });
-  d.sort((a, b) => b[1] - a[1]); k.sort((a, b) => b[1] - a[1]);
-  for (let i = 0, j = 0; i < d.length && j < k.length;) { const m = Math.min(d[i][1], k[j][1]); out.push({ from: d[i][0], to: k[j][0], cents: m, cur: c, items: [] }); d[i][1] -= m; k[j][1] -= m; if (!d[i][1]) i++; if (!k[j][1]) j++; }
-  return out;
-}
 function debts(list, c) {                       // 逐筆拆成「誰欠誰」
   const out = [];
   list.forEach(e => {
@@ -281,11 +271,10 @@ function viewSt() {
   const groups = dc() === 'SPLIT' ? ['TWD', 'JPY'].map(c => [c, ex.filter(e => e.currency === c)]) : [[dc(), ex]];
   const mine = L.members.filter(n => links()[n] === user.id);
   const note = multi() ? (mine.length ? `<p class="text-[10px] text-slate-500">你的身分：<b>${mine.map(esc).join('、')}</b>，只能勾選自己的欄位。</p>` : '<p class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">你的帳號還沒對應到任何成員名稱，目前不能勾選。請擁有者到「設定」的「成員與帳號對應」處理。</p>') : '';
-  const bar = `<div class="flex gap-1.5 text-[11px]">${[['pair', '依品項對帳'], ['min', '最少轉帳']].map(([k, n]) => `<button onclick="smode='${k}';render()" class="tab ${smode === k ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-600 border-slate-200'}">${n}</button>`).join('')}</div>`;
-  return `<div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">${head}${bar}${note}<div class="space-y-1.5 text-[11px]">${groups.map(([c, list]) => stBlock(list, c, groups.length > 1)).join('')}</div><p class="text-[9px] text-slate-400">金額或幣別變動後，舊的確認會自動失效，需要重新勾選。</p></div>`;
+  return `<div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">${head}${note}<div class="space-y-1.5 text-[11px]">${groups.map(([c, list]) => stBlock(list, c, groups.length > 1)).join('')}</div><p class="text-[9px] text-slate-400">金額或幣別變動後，舊的確認會自動失效，需要重新勾選。</p></div>`;
 }
 function stBlock(list, c, multiCur) {
-  const ts = (smode === 'pair' ? pairs : transfers)(list, c), F = n => fmt(n / 100, c), cname = c === 'JPY' ? '日圓' : '台幣';
+  const ts = pairs(list, c), F = n => fmt(n / 100, c), cname = c === 'JPY' ? '日圓' : '台幣';
   const rec = (k, r) => cf.find(x => x.key === k && x.role === r), keyOf = t => JSON.stringify([t.from, t.to, t.cents, c]);
   const done = t => { const k = keyOf(t); return !!(rec(k, 'paid') && rec(k, 'received')); };
   const h = multiCur ? `<div class="font-bold text-slate-700 border-b border-slate-200 pb-1 pt-1">${cname}結算</div>` : '';
@@ -437,6 +426,23 @@ function exportCsv() {
   const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"', rows = [['日期', '項目', '分類', '金額', '幣別', '付款人', '分帳模式', '分攤成員']].concat(ex.map(e => [e.spent_on, e.title, CATS[e.category] || e.category, e.amount, e.currency, e.payer, MODES[e.split_mode], (e.participants || []).join('/')]));
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.map(r => r.map(q).join(',')).join('\n')], { type: 'text/csv' })); a.download = L.title + '.csv'; a.click();
 }
+/* ---------- 可安裝（PWA） ---------- */
+let dip;
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const showInstall = () => { if (!standalone()) $('#h-install').classList.remove('hidden'); };
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); dip = e; showInstall(); });
+addEventListener('appinstalled', () => { dip = null; $('#h-install').classList.add('hidden'); closeModal(); toast('已安裝到主畫面'); });
+if (isIOS) showInstall();
+async function installApp() {
+  if (dip) { dip.prompt(); await dip.userChoice; dip = null; $('#h-install').classList.add('hidden'); closeModal(); return; }
+  const step = (n, t) => `<div class="flex gap-2 items-start"><span class="w-5 h-5 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center flex-shrink-0">${n}</span><p class="pt-0.5">${t}</p></div>`;
+  openModal('安裝到主畫面', `<div class="space-y-3 text-slate-700">${isIOS
+    ? step(1, '用 <b>Safari</b> 開啟本頁（其他瀏覽器無法安裝）') + step(2, '點下方工具列的 <b>分享</b> 圖示 <i class="fa-solid fa-arrow-up-from-bracket text-sky-600"></i>') + step(3, '往下找到並點 <b>加入主畫面</b>，再按「新增」')
+    : step(1, '用 <b>Chrome / Edge</b> 開啟本頁') + step(2, '點瀏覽器右上角選單 <b>⋮</b>') + step(3, '選 <b>安裝應用程式</b>（或「加到主畫面」）') + '<p class="text-[10px] text-slate-400">若選單裡找不到，請確認是用 https 網址開啟，並重新整理一次後再試。</p>'}</div>`, 'download');
+}
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+
 init();
 </script>
 </body>
