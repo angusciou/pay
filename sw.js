@@ -1,5 +1,5 @@
 // 更新網頁後，把版本號 +1，使用者下次開啟就會換成新版
-const VER = 'ledger-v1';
+const VER = 'ledger-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

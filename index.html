@@ -36,7 +36,7 @@ window.SUPABASE_CONFIG = { url: 'https://ihjvmuagdzjewspuydsu.supabase.co', key:
 
 <header class="relative z-30 bg-white border-b border-slate-200 px-3 py-2.5 text-slate-800 flex items-center justify-between shadow-sm flex-shrink-0">
   <div class="flex items-center space-x-2 min-w-0 cursor-pointer" onclick="goHome()">
-    <div class="bg-amber-500 text-white w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm shadow-sm flex-shrink-0"><i class="fa-solid fa-wallet"></i></div>
+    <div id="h-logo" class="bg-amber-500 text-white w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center font-bold text-sm shadow-sm flex-shrink-0"><i class="fa-solid fa-wallet"></i></div>
     <div class="min-w-0"><h1 id="h-title" class="text-xs font-bold truncate text-slate-900">帳本</h1><p id="h-sub" class="text-[9px] text-slate-500">點擊返回首頁</p></div>
   </div>
   <div class="flex items-center gap-1.5 flex-shrink-0 text-xs">
@@ -95,8 +95,8 @@ function sumStr(list, div = 1) {            // 依結算幣別加總；SPLIT 則
   const t = list.reduce((s, e) => s + conv(+e.amount, e.currency, dc()), 0) / div;
   return isNaN(t) ? '需設定匯率' : fmt(t, dc());
 }
-const banner = inner => `<div class="space-y-4 relative rounded-2xl p-4 overflow-hidden shadow-md" style="background-image:linear-gradient(to bottom,rgba(15,23,42,.8),rgba(15,23,42,.92)),linear-gradient(135deg,#d97706,#0f172a)">
-  <div class="text-center space-y-2 relative z-10 pt-2 text-white"><div class="w-16 h-16 bg-gradient-to-tr from-amber-500 to-orange-400 text-white rounded-3xl mx-auto flex items-center justify-center text-2xl shadow-lg"><i class="fa-solid fa-wallet"></i></div>
+const banner = inner => `<div class="space-y-4 relative rounded-2xl p-4 overflow-hidden shadow-md" style="background:${ui('bg') ? `linear-gradient(to bottom,rgba(15,23,42,.5),rgba(15,23,42,.88)),url('${ui('bg')}') center/cover` : 'linear-gradient(to bottom,rgba(15,23,42,.8),rgba(15,23,42,.92)),linear-gradient(135deg,#d97706,#0f172a)'}">
+  <div class="text-center space-y-2 relative z-10 pt-2 text-white"><div class="w-16 h-16 bg-gradient-to-tr from-amber-500 to-orange-400 text-white rounded-3xl mx-auto flex items-center justify-center text-2xl shadow-lg overflow-hidden">${ui('icon') ? `<img src="${ui('icon')}" class="w-full h-full object-cover">` : '<i class="fa-solid fa-wallet"></i>'}</div>
   <h2 class="text-xl font-extrabold tracking-wide">帳本</h2><p class="text-xs text-slate-300">記錄每一筆花費，輕鬆分帳與結算</p></div>
   <div class="space-y-3 pt-2 relative z-10">${inner}</div></div>`;
 const wcard = 'bg-white/95 backdrop-blur-sm border border-white/20 p-4 rounded-2xl shadow-sm text-slate-800';
@@ -109,8 +109,8 @@ async function init() {
   sb = supabase.createClient(c.url, c.key);
   const { data } = await sb.auth.getSession();
   user = data.session && data.session.user;
-  sb.auth.onAuthStateChange((_e, s) => { const u = s && s.user; if ((u && u.id) !== (user && user.id)) { user = u; user ? loadLedgers() : viewAuth(); } });
-  user ? loadLedgers() : viewAuth();
+  sb.auth.onAuthStateChange((_e, s) => { const u = s && s.user; if ((u && u.id) !== (user && user.id)) { user = u; user ? loadLedgers() : (applyUI(), viewAuth()); } });
+  user ? loadLedgers() : (applyUI(), viewAuth());
 }
 function viewConfig() {
   $('#nav').classList.add('hidden'); hdr('帳本', '尚未連接雲端');
@@ -138,6 +138,7 @@ async function auth(e, signup) {
 function acctModal() {
   openModal('雲端帳號', `<div class="space-y-3"><div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5"><p class="font-bold text-slate-800">${esc(nick())}</p><p class="text-[10px] text-slate-500">${esc(user.email)}</p></div>
   <p class="text-[10px] text-slate-500"><i class="fa-solid fa-circle text-emerald-500 text-[8px] mr-1"></i>已連線，資料會即時同步給共編者</p>
+  <div class="space-y-1.5"><p class="font-bold text-slate-700">外觀</p>${imgRow('icon', '小圖示', '頂欄與首頁的圖示，自動裁成正方形')}${imgRow('bg', '首頁背景圖', '首頁橫幅的背景')}<p class="text-[10px] text-slate-400">圖片會同步到你的帳號，在任何裝置登入後都會套用。</p></div>
   ${standalone() ? '' : `<button class="btn bg-amber-500" onclick="installApp()"><i class="fa-solid fa-download mr-1"></i>安裝到主畫面</button>`}
   <button class="btn bg-slate-700" onclick="sb.auth.signOut();closeModal()">登出</button>
   <button class="w-full text-slate-400 underline text-[10px]" onclick="localStorage.removeItem('sb_url');localStorage.removeItem('sb_key');location.reload()">清除本機的 Supabase 設定</button></div>`, 'user-circle');
@@ -147,7 +148,7 @@ function acctModal() {
 async function loadLedgers() {
   const { data, error } = await sb.from('ledgers').select('*').order('created_at', { ascending: false });
   if (error) return toast(error.message, 1);
-  ledgers = data; viewHome();
+  ledgers = data; await syncUI(); viewHome();
 }
 function goHome() { if (user) viewHome(); }
 function viewHome() {
@@ -426,6 +427,44 @@ function exportCsv() {
   const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"', rows = [['日期', '項目', '分類', '金額', '幣別', '付款人', '分帳模式', '分攤成員']].concat(ex.map(e => [e.spent_on, e.title, CATS[e.category] || e.category, e.amount, e.currency, e.payer, MODES[e.split_mode], (e.participants || []).join('/')]));
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.map(r => r.map(q).join(',')).join('\n')], { type: 'text/csv' })); a.download = L.title + '.csv'; a.click();
 }
+/* ---------- 外觀：自訂小圖示與背景圖（存在個人資料，跨裝置同步） ---------- */
+const COL = { icon: 'icon_data', bg: 'bg_data' };
+const ui = k => { try { return user ? localStorage.getItem('ui_' + user.id + '_' + k) || '' : ''; } catch (e) { return ''; } };
+const setUi = (k, v) => { try { v ? localStorage.setItem('ui_' + user.id + '_' + k, v) : localStorage.removeItem('ui_' + user.id + '_' + k); } catch (e) {} };
+async function syncUI() {                        // 登入後從雲端取回，本機只當快取
+  const { data, error } = await sb.from('profiles').select('icon_data,bg_data').eq('id', user.id).maybeSingle();
+  if (error || !data) return applyUI();
+  setUi('icon', data.icon_data); setUi('bg', data.bg_data); applyUI();
+}
+function imgRow(k, name, hint) {
+  const v = ui(k);
+  return `<div class="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-lg p-2"><div class="w-12 h-12 rounded-lg overflow-hidden bg-slate-200 flex-shrink-0">${v ? `<img src="${v}" class="w-full h-full object-cover">` : '<div class="w-full h-full flex items-center justify-center text-slate-400"><i class="fa-regular fa-image"></i></div>'}</div>
+  <div class="min-w-0 flex-1"><p class="font-bold text-slate-800">${name}</p><p class="text-[10px] text-slate-500">${hint}</p></div>
+  <div class="flex flex-col gap-1 items-end"><label class="sbtn bg-amber-500 cursor-pointer">上傳<input type="file" accept="image/*" class="hidden" onchange="pickImg('${k}',this.files[0]);this.value=''"></label>${v ? `<button class="text-[10px] text-slate-400 underline" onclick="resetImg('${k}')">還原預設</button>` : ''}</div></div>`;
+}
+async function saveUi(kind, val) {
+  const { data, error } = await sb.from('profiles').update({ [COL[kind]]: val }).eq('id', user.id).select('id');
+  if (error || !data || !data.length) { toast((error ? error.message : '找不到個人資料') + '（請確認已執行 supabase_profile_images.sql）', 1); return false; }
+  setUi(kind, val); applyUI(); if (!L) viewHome(); acctModal(); return true;
+}
+async function pickImg(kind, file) {
+  if (!file) return;
+  let val;
+  try {
+    const b = await createImageBitmap(file), c = document.createElement('canvas'), x = c.getContext('2d');
+    if (kind === 'icon') { const m = Math.min(b.width, b.height); c.width = c.height = 192; x.drawImage(b, (b.width - m) / 2, (b.height - m) / 2, m, m, 0, 0, 192, 192); val = c.toDataURL('image/png'); }
+    else { const k = Math.min(1, 900 / b.width); c.width = Math.round(b.width * k); c.height = Math.round(b.height * k); x.drawImage(b, 0, 0, c.width, c.height); val = c.toDataURL('image/jpeg', .72); }
+  } catch (e) { return toast('圖片處理失敗，請換一張圖片再試', 1); }
+  if (await saveUi(kind, val)) toast('已更新，其他裝置重新整理後會套用');
+}
+async function resetImg(kind) { if (await saveUi(kind, null)) toast('已還原預設'); }
+function applyUI() {
+  const i = ui('icon');
+  $('#h-logo').innerHTML = i ? `<img src="${i}" class="w-full h-full object-cover">` : '<i class="fa-solid fa-wallet"></i>';
+  $('link[rel=icon]').href = i || 'icon-192.png';
+}
+applyUI();
+
 /* ---------- 可安裝（PWA） ---------- */
 let dip;
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
