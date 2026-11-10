@@ -1,45 +1,65 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-TW" class="h-full">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>帳本 · 記帳與分帳</title>
-<meta name="theme-color" content="#2f6b4f">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>帳本 - 記帳與分帳</title>
+<meta name="theme-color" content="#d97706">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="帳本">
 <script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 // 方式一：直接填在這裡；方式二：留空，開啟網頁後在設定畫面貼上（存在瀏覽器 localStorage）
 window.SUPABASE_CONFIG = { url: 'https://ihjvmuagdzjewspuydsu.supabase.co', key: 'sb_publishable_C_NUZLfd14gwE-mSsxBUqA_WrbY3s4Y' };
 </script>
 <style type="text/tailwindcss">
-  body{font-family:'Noto Sans TC',sans-serif;background:#f6f1e7;color:#1f2a24;-webkit-tap-highlight-color:transparent}
-  .serif{font-family:'Noto Serif TC',serif}
-  .num{font-variant-numeric:tabular-nums}
-  .card{@apply bg-[#fffdf8] rounded-xl border border-[#e3dac8] p-3}
-  .in{@apply w-full border border-[#d9cfbb] bg-white rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#2f6b4f]}
-  .btn{@apply bg-[#2f6b4f] text-white rounded-lg px-3 py-2 text-sm font-medium active:opacity-80}
-  .ghost{@apply border border-[#d9cfbb] rounded-lg px-3 py-2 text-sm bg-white}
-  .lbl{@apply block text-xs text-[#6b6a5e] mb-1}
-  .tear{border-top:1.5px dashed #cdc2aa}
-  .chip{@apply px-2.5 py-1 rounded-full text-xs border border-[#d9cfbb] bg-white}
-  .chip.on{@apply bg-[#1f2a24] text-white border-[#1f2a24]}
+  body{font-family:'Noto Sans TC',sans-serif;-webkit-tap-highlight-color:transparent;background-color:#f8fafc;color:#1e293b}
+  ::-webkit-scrollbar{width:3px;height:3px}
+  ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:99px}
+  .card{@apply bg-white rounded-xl border border-slate-200 shadow-sm p-3}
+  .in{@apply w-full border border-slate-200 rounded p-1.5 outline-none bg-white focus:border-amber-500}
+  .lbl{@apply block font-bold text-slate-700 mb-1}
+  .btn{@apply w-full text-white font-semibold py-2 rounded-lg shadow-sm disabled:opacity-60}
+  .sbtn{@apply text-white text-[10px] px-2.5 py-1 rounded font-medium whitespace-nowrap}
+  .tab{@apply flex-1 py-1 rounded font-bold border}
 </style>
 </head>
-<body>
-<div id="app" class="max-w-md mx-auto min-h-screen px-3 pt-3 pb-24"></div>
-<nav id="nav" class="hidden fixed bottom-0 inset-x-0 bg-[#fffdf8] border-t border-[#e3dac8] pb-[env(safe-area-inset-bottom)]"><div class="max-w-md mx-auto grid grid-cols-4 text-xs" id="tabs"></div></nav>
-<div id="modal" class="hidden fixed inset-0 z-40 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onclick="if(event.target===this)closeModal()"><div id="sheet" class="bg-[#fffdf8] w-full max-w-md rounded-t-2xl sm:rounded-2xl p-4 max-h-[90vh] overflow-y-auto"></div></div>
-<div id="toast" class="fixed top-3 left-1/2 -translate-x-1/2 z-50 text-sm px-3 py-2 rounded-lg text-white hidden"></div>
+<body class="h-full bg-slate-50 text-slate-800 text-xs flex flex-col justify-between overflow-x-hidden">
+
+<header class="relative z-30 bg-white border-b border-slate-200 px-3 py-2.5 text-slate-800 flex items-center justify-between shadow-sm flex-shrink-0">
+  <div class="flex items-center space-x-2 min-w-0 cursor-pointer" onclick="goHome()">
+    <div class="bg-amber-500 text-white w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm shadow-sm flex-shrink-0"><i class="fa-solid fa-wallet"></i></div>
+    <div class="min-w-0"><h1 id="h-title" class="text-xs font-bold truncate text-slate-900">帳本</h1><p id="h-sub" class="text-[9px] text-slate-500">點擊返回首頁</p></div>
+  </div>
+  <div id="h-btns" class="hidden items-center gap-1.5 flex-shrink-0 text-xs">
+    <button onclick="goHome()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg border border-slate-200 font-bold"><i class="fa-solid fa-house text-amber-600 mr-1"></i>首頁</button>
+    <button onclick="acctModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 p-1.5 rounded-lg border border-slate-200 relative" title="帳號"><i class="fa-solid fa-user-circle text-emerald-600"></i><span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500"></span></button>
+  </div>
+</header>
+
+<main class="relative z-20 flex-1 flex flex-col p-3 overflow-y-auto max-w-md mx-auto w-full pb-24"><div id="app" class="flex-1 flex flex-col space-y-3 pb-4"></div></main>
+
+<nav id="nav" class="hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 px-3 py-2 flex items-center justify-around text-slate-400 shadow-lg"></nav>
+
+<div id="modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onclick="if(event.target===this)closeModal()">
+  <div id="sheet" class="bg-white rounded-2xl max-w-sm w-full p-4 shadow-xl relative text-xs max-h-[90vh] overflow-y-auto"></div>
+</div>
+<div id="toast" class="fixed top-3 left-1/2 -translate-x-1/2 z-[60] text-xs px-3 py-2 rounded-lg text-white shadow-lg hidden"></div>
 
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const CATS = {food:'🍜 餐飲', transport:'✈️ 交通', hotel:'🏨 住宿', tickets:'🎫 門票', shopping:'🛍️ 購物', other:'📦 其他'};
-const MODES = {normal:'均分（付款人也分攤）', payer_excluded:'代墊（付款人不分攤）', self:'自行負擔（不分帳）'};
+const CATS = {food:'🍜 餐飲美食', transport:'✈️ 交通運具', hotel:'🏨 住宿旅館', tickets:'🎫 門票娛樂', shopping:'🛍️ 購物伴手禮', other:'📦 其它雜項'};
+const MODES = {normal:'均分模式 (付款人也參與分攤)', payer_excluded:'代墊模式 (付款人不需付錢，僅分攤人還款)', self:'自行付款 (付款人自己負擔，不產生欠款)'};
+const MODE_SHORT = {normal:'均分', payer_excluded:'代墊', self:'自付'};
+const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6', '#64748b'];
 const BUCKET = 'ledger-images';
-let sb, user, ledgers = [], L = null, ex = [], sh = [], cf = [], tab = 'ex', fcat = 'ALL', sf = 'all', chart, ch, urls = {};
+const EB = 'btn bg-emerald-600', PB = 'btn bg-pink-600';
+let sb, user, collab = [], smode = 'pair', ledgers = [], L = null, ex = [], sh = [], cf = [], tab = 'ex', fd = 'ALL', fcat = 'ALL', fp = 'ALL', sf = 'all', chart, ch, urls = {};
 
 /* ---------- 工具 ---------- */
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
@@ -49,9 +69,17 @@ const conv = (a, f, t) => f === t ? a : !rate() ? NaN : f === 'JPY' ? a * rate()
 const fmt = (n, c) => (c === 'JPY' ? '¥' : 'NT$ ') + (c === 'JPY' ? Math.round(n) : Math.round(n * 100) / 100).toLocaleString('zh-TW');
 const nick = () => (user.user_metadata && user.user_metadata.nickname) || user.email.split('@')[0];
 const isOwner = () => L && L.owner_id === user.id;
-function toast(m, bad) { const t = $('#toast'); t.textContent = m; t.className = 'fixed top-3 left-1/2 -translate-x-1/2 z-50 text-sm px-3 py-2 rounded-lg text-white ' + (bad ? 'bg-[#c8452d]' : 'bg-[#2f6b4f]'); setTimeout(() => t.classList.add('hidden'), 2600); }
-function openModal(h) { $('#sheet').innerHTML = h; $('#modal').classList.remove('hidden'); }
+const links = () => L.member_links || {};
+const multi = () => collab.length > 1;                       // 有共編者才管控身分
+const canConfirm = n => !multi() || links()[n] === user.id;
+const fdt = t => new Date(t).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+function toast(m, bad) { const t = $('#toast'); t.textContent = m; t.className = 'fixed top-3 left-1/2 -translate-x-1/2 z-[60] text-xs px-3 py-2 rounded-lg text-white shadow-lg ' + (bad ? 'bg-red-500' : 'bg-emerald-600'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.add('hidden'), 2600); }
+function openModal(title, body, icon = 'pen-to-square') {
+  $('#sheet').innerHTML = `<button onclick="closeModal()" class="absolute top-3 right-3 text-slate-400 text-base"><i class="fa-solid fa-xmark"></i></button><h3 class="font-bold text-slate-900 mb-3 text-sm"><i class="fa-solid fa-${icon} text-amber-500 mr-1"></i>${title}</h3>${body}`;
+  $('#modal').classList.remove('hidden');
+}
 function closeModal() { $('#modal').classList.add('hidden'); }
+function hdr(t, s) { $('#h-title').textContent = t; $('#h-sub').textContent = s; $('#h-btns').classList.toggle('hidden', !user); $('#h-btns').classList.toggle('flex', !!user); }
 function sumStr(list, div = 1) {            // 依結算幣別加總；SPLIT 則台幣、日圓各算各的
   if (dc() === 'SPLIT') {
     const p = ['TWD', 'JPY'].map(c => [c, list.filter(e => e.currency === c).reduce((s, e) => s + +e.amount, 0) / div]).filter(x => x[1] > 0).map(([c, n]) => fmt(n, c));
@@ -60,6 +88,11 @@ function sumStr(list, div = 1) {            // 依結算幣別加總；SPLIT 則
   const t = list.reduce((s, e) => s + conv(+e.amount, e.currency, dc()), 0) / div;
   return isNaN(t) ? '需設定匯率' : fmt(t, dc());
 }
+const banner = inner => `<div class="space-y-4 relative rounded-2xl p-4 overflow-hidden shadow-md" style="background-image:linear-gradient(to bottom,rgba(15,23,42,.8),rgba(15,23,42,.92)),linear-gradient(135deg,#d97706,#0f172a)">
+  <div class="text-center space-y-2 relative z-10 pt-2 text-white"><div class="w-16 h-16 bg-gradient-to-tr from-amber-500 to-orange-400 text-white rounded-3xl mx-auto flex items-center justify-center text-2xl shadow-lg"><i class="fa-solid fa-wallet"></i></div>
+  <h2 class="text-xl font-extrabold tracking-wide">帳本</h2><p class="text-xs text-slate-300">記錄每一筆花費，輕鬆分帳與結算</p></div>
+  <div class="space-y-3 pt-2 relative z-10">${inner}</div></div>`;
+const wcard = 'bg-white/95 backdrop-blur-sm border border-white/20 p-4 rounded-2xl shadow-sm text-slate-800';
 
 /* ---------- 啟動與登入 ---------- */
 function cfg() { const c = window.SUPABASE_CONFIG || {}; return { url: c.url || localStorage.getItem('sb_url') || '', key: c.key || localStorage.getItem('sb_key') || '' }; }
@@ -73,22 +106,21 @@ async function init() {
   user ? loadLedgers() : viewAuth();
 }
 function viewConfig() {
-  $('#nav').classList.add('hidden');
-  $('#app').innerHTML = `<div class="pt-10 space-y-3"><h1 class="serif text-2xl">連接 Supabase</h1>
-  <p class="text-sm text-[#6b6a5e]">先依 supabase_setup.sql 開頭的步驟建立專案，再貼上 Project URL 與 anon / publishable key。</p>
-  <form class="card space-y-2" onsubmit="saveCfg(event)"><div><label class="lbl">Project URL</label><input name="u" class="in" placeholder="https://xxxx.supabase.co" required></div>
-  <div><label class="lbl">anon / publishable key</label><input name="k" class="in" required></div><button class="btn w-full">儲存並開始</button></form></div>`;
+  $('#nav').classList.add('hidden'); hdr('帳本', '尚未連接雲端');
+  $('#app').innerHTML = banner(`<form class="${wcard} space-y-2.5" onsubmit="saveCfg(event)"><h3 class="font-bold text-sm"><i class="fa-solid fa-cloud text-amber-500 mr-1"></i>連接 Supabase</h3>
+  <p class="text-[10px] text-slate-500">依 supabase_setup.sql 開頭的步驟建立專案，再貼上 Project URL 與 publishable key。</p>
+  <div><label class="lbl">Project URL</label><input name="u" class="in" placeholder="https://xxxx.supabase.co" required></div>
+  <div><label class="lbl">publishable / anon key</label><input name="k" class="in" required></div><button class="${EB}">儲存並開始</button></form>`);
 }
 function saveCfg(e) { e.preventDefault(); const f = new FormData(e.target); localStorage.setItem('sb_url', f.get('u').trim()); localStorage.setItem('sb_key', f.get('k').trim()); location.reload(); }
 function viewAuth(signup) {
-  $('#nav').classList.add('hidden');
-  $('#app').innerHTML = `<div class="pt-12 space-y-4"><div><h1 class="serif text-3xl">帳本</h1><p class="text-sm text-[#6b6a5e] mt-1">記帳、分帳、購物清單，多人即時同步</p></div>
-  <form class="card space-y-2" onsubmit="auth(event,${!!signup})">
+  $('#nav').classList.add('hidden'); hdr('帳本', '請先登入');
+  $('#app').innerHTML = banner(`<form class="${wcard} space-y-2.5" onsubmit="auth(event,${!!signup})"><h3 class="font-bold text-sm"><i class="fa-solid fa-user-circle text-emerald-600 mr-1"></i>${signup ? '註冊新帳號' : '登入雲端帳號'}</h3>
   ${signup ? '<div><label class="lbl">暱稱（分帳時顯示的名字）</label><input name="nick" class="in" required></div>' : ''}
   <div><label class="lbl">Email</label><input name="email" type="email" class="in" required></div>
   <div><label class="lbl">密碼（至少 6 碼）</label><input name="pw" type="password" minlength="6" class="in" required></div>
-  <button class="btn w-full">${signup ? '註冊' : '登入'}</button></form>
-  <div class="flex justify-between text-sm"><button class="underline" onclick="viewAuth(${!signup})">${signup ? '已有帳號？登入' : '沒有帳號？註冊'}</button><button class="underline text-[#6b6a5e]" onclick="localStorage.removeItem('sb_url');localStorage.removeItem('sb_key');location.reload()">更換 Supabase 設定</button></div></div>`;
+  <button class="${EB}">${signup ? '註冊' : '登入'}</button>
+  <button type="button" class="w-full text-slate-500 underline" onclick="viewAuth(${!signup})">${signup ? '已有帳號？登入' : '沒有帳號？註冊'}</button></form>`);
 }
 async function auth(e, signup) {
   e.preventDefault(); const f = new FormData(e.target), email = f.get('email').trim(), password = f.get('pw');
@@ -96,36 +128,49 @@ async function auth(e, signup) {
   if (r.error) return toast(r.error.message, 1);
   if (signup && !r.data.session) { toast('註冊成功，請到信箱完成驗證後登入'); viewAuth(); }
 }
+function acctModal() {
+  openModal('雲端帳號', `<div class="space-y-3"><div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5"><p class="font-bold text-slate-800">${esc(nick())}</p><p class="text-[10px] text-slate-500">${esc(user.email)}</p></div>
+  <p class="text-[10px] text-slate-500"><i class="fa-solid fa-circle text-emerald-500 text-[8px] mr-1"></i>已連線，資料會即時同步給共編者</p>
+  <button class="btn bg-slate-700" onclick="sb.auth.signOut();closeModal()">登出</button>
+  <button class="w-full text-slate-400 underline text-[10px]" onclick="localStorage.removeItem('sb_url');localStorage.removeItem('sb_key');location.reload()">清除本機的 Supabase 設定</button></div>`, 'user-circle');
+}
 
-/* ---------- 帳本列表 ---------- */
+/* ---------- 帳本列表（首頁） ---------- */
 async function loadLedgers() {
   const { data, error } = await sb.from('ledgers').select('*').order('created_at', { ascending: false });
   if (error) return toast(error.message, 1);
   ledgers = data; viewHome();
 }
+function goHome() { if (user) viewHome(); }
 function viewHome() {
-  L = null; if (ch) { sb.removeChannel(ch); ch = null; } $('#nav').classList.add('hidden');
-  $('#app').innerHTML = `<div class="flex items-center justify-between py-2"><h1 class="serif text-2xl">我的帳本</h1><button class="ghost" onclick="sb.auth.signOut()">${esc(nick())} · 登出</button></div>
-  <div class="space-y-2 mt-2">${ledgers.map(l => `<button class="card w-full text-left" onclick="openLedger('${l.id}')"><div class="serif text-lg">${esc(l.title)}</div><div class="text-xs text-[#6b6a5e] mt-0.5">${l.members.length} 位成員${+l.budget ? ' · 預算 ' + fmt(l.budget, 'TWD') : ''}${l.owner_id === user.id ? '' : ' · 共編'}</div></button>`).join('') || '<p class="text-sm text-[#6b6a5e] py-6 text-center">還沒有帳本，先建立一個吧</p>'}</div>
-  <form class="card mt-4 space-y-2" onsubmit="newLedger(event)"><div class="serif">新增帳本</div><input name="t" class="in" placeholder="例：京都旅行 / 家用 / 室友" required>
-  <input name="b" type="number" min="0" class="in" placeholder="預算（台幣，可留空）"><button class="btn w-full">建立</button></form>`;
+  L = null; if (ch) { sb.removeChannel(ch); ch = null; } $('#nav').classList.add('hidden'); hdr('帳本', '點擊返回首頁');
+  $('#app').innerHTML = banner(`<div onclick="newLedgerModal()" class="bg-gradient-to-r from-amber-500 to-amber-600 text-white p-4 rounded-2xl shadow-md cursor-pointer active:scale-95 transition flex items-center justify-between">
+    <div class="flex items-center space-x-3"><div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-lg"><i class="fa-solid fa-circle-plus"></i></div><div><h3 class="text-sm font-bold">新增帳本</h3><p class="text-[10px] text-amber-100">建立新帳本，開始記帳與分帳</p></div></div><i class="fa-solid fa-chevron-right text-xs text-amber-200"></i></div>
+    <div class="flex items-center justify-between text-white pt-1"><span class="text-xs font-bold">我的帳本</span><span class="bg-emerald-100 text-emerald-700 text-xs px-2.5 py-0.5 rounded-full font-bold">${ledgers.length}</span></div>
+    ${ledgers.map(l => `<div onclick="openLedger('${l.id}')" class="bg-white/95 backdrop-blur-sm border border-white/20 p-4 rounded-2xl shadow-sm cursor-pointer hover:bg-white transition flex items-center justify-between text-slate-800">
+      <div class="flex items-center space-x-3 min-w-0"><div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg flex-shrink-0"><i class="fa-solid fa-book"></i></div>
+      <div class="min-w-0"><h3 class="text-sm font-bold truncate">${esc(l.title)}</h3><p class="text-[10px] text-slate-500">${l.members.length} 位成員${+l.budget ? ' ・預算 ' + fmt(l.budget, 'TWD') : ''}${l.owner_id === user.id ? '' : ' ・共編'}</p></div></div><i class="fa-solid fa-chevron-right text-xs text-slate-300"></i></div>`).join('') || '<p class="text-center text-slate-300 text-[11px] py-3">還沒有帳本，點上方「新增帳本」開始</p>'}`);
+}
+function newLedgerModal() {
+  openModal('新增帳本', `<form class="space-y-2.5" onsubmit="newLedger(event)"><div><label class="lbl">帳本名稱</label><input name="t" class="in" placeholder="例: 京都旅行 / 家用 / 室友" required></div>
+  <div><label class="lbl">預算 (TWD)</label><input name="b" type="number" min="0" class="in" placeholder="留空 = 無預算"></div><button class="${EB}">建立帳本</button></form>`, 'circle-plus');
 }
 async function newLedger(e) {
   e.preventDefault(); const f = new FormData(e.target);
-  const { data, error } = await sb.from('ledgers').insert({ title: f.get('t').trim(), budget: +f.get('b') || 0, members: [nick()] }).select().single();
+  const { data, error } = await sb.from('ledgers').insert({ title: f.get('t').trim(), budget: +f.get('b') || 0, members: [nick()], member_links: { [nick()]: user.id } }).select().single();
   if (error) return toast(error.message, 1);
-  ledgers.unshift(data); openLedger(data.id);
+  closeModal(); ledgers.unshift(data); openLedger(data.id);
 }
 async function openLedger(id) {
-  L = ledgers.find(l => l.id === id); tab = 'ex'; fcat = 'ALL'; sf = 'all'; urls = {};
+  L = ledgers.find(l => l.id === id); tab = 'ex'; fd = fcat = fp = 'ALL'; sf = 'all'; urls = {};
   if (ch) sb.removeChannel(ch);
   ch = sb.channel('l' + id); ['expenses', 'shopping_items', 'settlements'].forEach(t => ch.on('postgres_changes', { event: '*', schema: 'public', table: t, filter: 'ledger_id=eq.' + id }, load));
   ch.subscribe(); $('#nav').classList.remove('hidden'); await load();
 }
 async function load() {
   if (!L) return; const q = t => sb.from(t).select('*').eq('ledger_id', L.id);
-  const [a, b, c] = await Promise.all([q('expenses').order('spent_on', { ascending: false }).order('created_at', { ascending: false }), q('shopping_items').order('created_at'), q('settlements')]);
-  ex = a.data || []; sh = b.data || []; cf = c.data || [];
+  const [a, b, c, d, e] = await Promise.all([q('expenses').order('spent_on', { ascending: false }).order('created_at', { ascending: false }), q('shopping_items').order('created_at'), q('settlements'), sb.rpc('ledger_collaborators', { lid: L.id }), sb.from('ledgers').select('*').eq('id', L.id).maybeSingle()]);
+  ex = a.data || []; sh = b.data || []; cf = c.data || []; collab = d.data || []; if (e.data) Object.assign(L, e.data);
   const need = sh.filter(i => i.image_path && !urls[i.image_path]).map(i => i.image_path);
   if (need.length) { const { data } = await sb.storage.from(BUCKET).createSignedUrls(need, 3600); (data || []).forEach(d => d.signedUrl && (urls[d.path] = d.signedUrl)); }
   render();
@@ -133,44 +178,55 @@ async function load() {
 function setTab(t) { tab = t; render(); window.scrollTo(0, 0); }
 function render() {
   if (!L) return; if (chart) { chart.destroy(); chart = null; }
-  const tabs = [['ex', '📒', '花費'], ['st', '⚖️', '結算'], ['sh', '🛍️', '購物'], ['cfg', '⚙️', '設定']];
-  $('#tabs').innerHTML = tabs.map(([k, i, n]) => `<button onclick="setTab('${k}')" class="py-2 ${tab === k ? 'text-[#2f6b4f] font-bold' : 'text-[#6b6a5e]'}"><div class="text-lg leading-none">${i}</div>${n}</button>`).join('');
-  $('#app').innerHTML = `<div class="flex items-center gap-2 py-2"><button class="ghost !px-2" onclick="viewHome()">‹</button><h1 class="serif text-xl truncate">${esc(L.title)}</h1></div>` + { ex: viewEx, st: viewSt, sh: viewSh, cfg: viewCfg }[tab]();
+  const tabs = [['home', 'house', '首頁'], ['ex', 'receipt', '花費'], ['sh', 'bag-shopping', '購物'], ['cfg', 'gear', '設定']];
+  $('#nav').innerHTML = tabs.map(([k, i, n]) => `<button onclick="${k === 'home' ? 'goHome()' : `setTab('${k}')`}" class="flex flex-col items-center gap-0.5 text-[10px] font-bold ${tab === k ? 'text-amber-600' : 'text-slate-400'}"><i class="fa-solid fa-${i} text-base"></i><span>${n}</span></button>`).join('');
+  hdr(L.title, `${L.members.length} 位成員${+L.budget ? ' ・預算 ' + fmt(L.budget, 'TWD') : ''}`);
+  $('#app').innerHTML = { ex: viewEx, sh: viewSh, cfg: viewCfg }[tab]();
   if (tab === 'ex') drawChart(); if (tab === 'cfg') loadCollab();
 }
+const pageHead = (icon, color, title, btn) => `<div class="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200 shadow-sm"><h2 class="text-sm font-bold text-slate-900 flex items-center gap-1.5"><i class="fa-solid fa-${icon} ${color}"></i> ${title}</h2>${btn || ''}</div>`;
 
 /* ---------- 花費 ---------- */
+function filtered() { return ex.filter(e => (fd === 'ALL' || e.spent_on === fd) && (fcat === 'ALL' || e.category === fcat) && (fp === 'ALL' || e.payer === fp)); }
+function fsel(v, name, all, o) { return `<select onchange="${v}=this.value;render()" class="bg-slate-50 border border-slate-200 rounded p-1 outline-none"><option value="ALL">${all}</option>${o.map(([k, t]) => `<option value="${esc(k)}" ${k === name ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`; }
 function viewEx() {
-  const all = ex, list = all.filter(e => fcat === 'ALL' || e.category === fcat), n = L.members.length || 1;
+  const list = filtered(), n = L.members.length || 1;
   let remain = '無預算';
-  if (+L.budget) { const t = all.reduce((s, e) => s + conv(+e.amount, e.currency, 'TWD'), 0); remain = isNaN(t) ? '需設定匯率' : fmt(L.budget - t, 'TWD'); }
-  return `<div class="grid grid-cols-3 gap-2 text-center">${[['總支出', sumStr(all)], ['剩餘預算', remain], ['人均', sumStr(all, n)]].map(([a, b]) => `<div class="card !p-2"><div class="text-[11px] text-[#6b6a5e]">${a}</div><div class="num text-sm font-bold mt-0.5 break-words">${b}</div></div>`).join('')}</div>
-  <div class="card mt-2"><div class="relative h-52"><canvas id="pie"></canvas></div><div id="bars" class="space-y-1 text-xs mt-2"></div></div>
-  <div class="flex items-center justify-between mt-3 mb-1.5"><div class="flex gap-1.5 overflow-x-auto">${['ALL', ...Object.keys(CATS)].map(k => `<button class="chip whitespace-nowrap ${fcat === k ? 'on' : ''}" onclick="fcat='${k}';render()">${k === 'ALL' ? '全部' : CATS[k]}</button>`).join('')}</div>
-  <button class="btn !py-1.5 ml-2 whitespace-nowrap" onclick="expForm()">＋ 記一筆</button></div>
-  <div class="card !p-0 divide-y divide-dashed divide-[#cdc2aa]">${list.map(e => `<button class="w-full text-left p-3 flex justify-between gap-2" onclick="expForm('${e.id}')"><div class="min-w-0"><div class="text-sm truncate">${CATS[e.category]?.slice(0, 2) || '📦'} ${esc(e.title)}</div><div class="text-[11px] text-[#6b6a5e]">${e.spent_on} · ${esc(e.payer)} 付${e.split_mode === 'self' ? ' · 自行負擔' : e.split_mode === 'payer_excluded' ? ' · 代墊' : ''}</div></div><div class="num text-sm font-bold whitespace-nowrap">${fmt(e.amount, e.currency)}</div></button>`).join('') || '<p class="text-center text-sm text-[#6b6a5e] py-6">沒有紀錄</p>'}</div>`;
+  if (+L.budget) { const t = ex.reduce((s, e) => s + conv(+e.amount, e.currency, 'TWD'), 0); remain = isNaN(t) ? '需設定匯率' : fmt(L.budget - t, 'TWD'); }
+  const dates = [...new Set(ex.map(e => e.spent_on))].sort(), cats = [...new Set([...Object.keys(CATS), ...ex.map(e => e.category)])], pays = [...new Set(ex.map(e => e.payer))].sort();
+  return pageHead('receipt', 'text-emerald-600', '花費記帳與智慧分帳', `<button onclick="expForm()" class="sbtn bg-emerald-600"><i class="fa-solid fa-plus"></i> 新增</button>`) +
+  `<div class="bg-white p-2.5 rounded-xl border border-slate-200 grid grid-cols-3 gap-1.5 text-[10px]">${fsel('fd', fd, '全部日期', dates.map(d => [d, d]))}${fsel('fcat', fcat, '全部分類', cats.map(k => [k, CATS[k] || k]))}${fsel('fp', fp, '全部付款', pays.map(p => [p, p]))}</div>
+  <div class="grid grid-cols-3 gap-2">${[['總支出', sumStr(list), 'text-slate-800'], ['剩餘預算', remain, 'text-emerald-600'], ['人均分攤', sumStr(list, n), 'text-sky-600']].map(([a, b, c]) => `<div class="bg-white p-2 rounded-xl border border-slate-200 text-center shadow-sm"><p class="text-[9px] text-slate-500">${a}</p><p class="text-xs font-bold ${c} mt-0.5 break-words">${b}</p></div>`).join('')}</div>` +
+  viewSt() +
+  `<div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2"><h4 class="text-xs font-bold text-slate-700">分類支出佔比</h4><div class="relative h-64 w-full flex items-center justify-center"><canvas id="pie"></canvas></div><div id="bars" class="space-y-1.5 text-[11px] pt-2"></div></div>
+  <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm"><h4 class="text-xs font-bold text-slate-700 mb-2">支出明細紀錄 (點選項目可修改)</h4><div class="space-y-1.5 max-h-72 overflow-y-auto">${list.map(e => `<div onclick="expForm('${e.id}')" class="bg-slate-50 p-2 rounded-lg border border-slate-200 flex items-center justify-between text-[11px] cursor-pointer hover:border-emerald-400 transition">
+    <div class="min-w-0"><span class="font-bold text-slate-800">${esc(e.title)}</span><p class="text-[9px] text-slate-400">${e.spent_on} | 付款: ${esc(e.payer)} | 模式: ${MODE_SHORT[e.split_mode]}</p></div>
+    <div class="flex items-center gap-1.5 flex-shrink-0" onclick="event.stopPropagation()"><span class="font-bold text-emerald-600">${fmt(e.amount, e.currency)}</span>
+    <button onclick="expForm('${e.id}')" class="text-slate-400 hover:text-emerald-600 p-1" title="編輯花費"><i class="fa-solid fa-pen"></i></button><button onclick="delExp('${e.id}')" class="text-slate-300 hover:text-red-500 p-1" title="刪除花費"><i class="fa-solid fa-xmark"></i></button></div></div>`).join('') || '<p class="text-[11px] text-slate-400 text-center py-3">無記帳紀錄</p>'}</div></div>`;
 }
 function drawChart() {
   const c = dc() === 'JPY' ? 'JPY' : 'TWD', by = {};
-  ex.filter(e => fcat === 'ALL' || e.category === fcat).forEach(e => { const v = conv(+e.amount, e.currency, c); if (!isNaN(v)) by[e.category] = (by[e.category] || 0) + v; });
-  const keys = Object.keys(by), tot = keys.reduce((s, k) => s + by[k], 0), col = ['#2f6b4f', '#c8452d', '#d9a441', '#4a7c9b', '#8a5a83', '#8a8a7a'];
-  if (!tot) { $('#bars').innerHTML = '<p class="text-center text-[#6b6a5e]">尚無可統計的支出</p>'; return; }
-  chart = new Chart($('#pie'), { type: 'doughnut', data: { labels: keys.map(k => CATS[k] || k), datasets: [{ data: keys.map(k => by[k]), backgroundColor: keys.map((_, i) => col[i % 6]), borderWidth: 0 }] }, options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { display: false } } } });
-  $('#bars').innerHTML = keys.sort((a, b) => by[b] - by[a]).map((k, i) => `<div class="flex justify-between"><span>${CATS[k] || k}</span><span class="num">${fmt(by[k], c)} · ${Math.round(by[k] / tot * 100)}%</span></div>`).join('') + (dc() === 'SPLIT' ? '<p class="text-[#6b6a5e]">圖表以台幣換算，僅供參考</p>' : '');
+  filtered().forEach(e => { const v = conv(+e.amount, e.currency, c); if (!isNaN(v)) by[e.category] = (by[e.category] || 0) + v; });
+  const keys = Object.keys(by).sort((a, b) => by[b] - by[a]), tot = keys.reduce((s, k) => s + by[k], 0);
+  if (!tot) { $('#pie').parentNode.innerHTML = '<p class="text-[11px] text-slate-400">尚無可統計的支出</p>'; return; }
+  chart = new Chart($('#pie'), { type: 'doughnut', data: { labels: keys.map(k => CATS[k] || k), datasets: [{ data: keys.map(k => by[k]), backgroundColor: keys.map((_, i) => COLORS[i % 6]), borderWidth: 0 }] }, options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { display: false } } } });
+  $('#bars').innerHTML = keys.map((k, i) => { const p = Math.round(by[k] / tot * 100), col = COLORS[i % 6]; return `<div class="space-y-1"><div class="flex justify-between text-[11px] font-bold text-slate-700"><span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${col}"></span>${CATS[k] || k}</span><span>${fmt(by[k], c)} (${p < 1 ? '<1' : p}%)</span></div><div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div class="h-full rounded-full" style="width:${Math.max(p, 1)}%;background:${col}"></div></div></div>`; }).join('') + (dc() === 'SPLIT' ? '<p class="text-[10px] text-slate-400">圖表以台幣換算，僅供參考。</p>' : '');
 }
-function partsBox(parts) { return `<div class="flex flex-wrap gap-x-4 gap-y-1.5">${L.members.map(m => `<label class="text-sm flex items-center gap-1"><input type="checkbox" name="p" value="${esc(m)}" ${parts.includes(m) ? 'checked' : ''} class="accent-[#2f6b4f]">${esc(m)}</label>`).join('')}</div>`; }
+function partsBox(parts) { return `<div class="flex flex-wrap gap-x-4 gap-y-1.5">${L.members.map(m => `<label class="flex items-center gap-1"><input type="checkbox" name="p" value="${esc(m)}" ${parts.includes(m) ? 'checked' : ''} class="w-4 h-4 accent-emerald-600">${esc(m)}</label>`).join('')}</div>`; }
 const opts = (o, v) => Object.entries(o).map(([k, t]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${t}</option>`).join('');
-const payerSel = p => `<select name="payer" class="in" required><option value="">付款人</option>${L.members.map(m => `<option ${m === p ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>`;
+const payerSel = p => `<select name="payer" class="in" required><option value="">選擇付款人</option>${L.members.map(m => `<option ${m === p ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>`;
+const curSel = c => `<select name="currency" class="border border-slate-200 rounded p-1 bg-slate-50 outline-none"><option value="TWD">台幣</option><option value="JPY" ${c === 'JPY' ? 'selected' : ''}>日圓</option></select>`;
 function expForm(id) {
   if (!L.members.length) return toast('請先到「設定」新增成員', 1);
   const e = ex.find(x => x.id === id) || {};
-  openModal(`<form class="space-y-2.5" onsubmit="saveExp(event,'${id || ''}')"><h3 class="serif text-lg">${id ? '編輯花費' : '記一筆'}</h3>
-  <input name="title" class="in" placeholder="項目名稱" value="${esc(e.title)}" required>
-  <div class="flex gap-2"><input name="amount" type="number" step="any" min="0.01" class="in" placeholder="金額" value="${e.amount ?? ''}" required><select name="currency" class="in !w-24"><option value="TWD">台幣</option><option value="JPY" ${e.currency === 'JPY' ? 'selected' : ''}>日圓</option></select></div>
-  <div class="flex gap-2"><input name="date" type="date" class="in" value="${e.spent_on || today()}" required><select name="category" class="in">${opts(CATS, e.category || 'food')}</select></div>
-  ${payerSel(e.payer)}<select name="mode" class="in">${opts(MODES, e.split_mode || 'normal')}</select>
-  <div><label class="lbl">分攤成員</label>${partsBox(e.participants || L.members)}</div>
-  <div class="flex gap-2"><button class="btn flex-1">儲存</button>${id ? `<button type="button" class="ghost text-[#c8452d]" onclick="delExp('${id}')">刪除</button>` : ''}</div></form>`);
+  openModal(id ? '編輯記帳品項' : '新增記帳品項與彈性分帳', `<form class="space-y-2.5" onsubmit="saveExp(event,'${id || ''}')">
+  <div><label class="lbl">項目名稱</label><input name="title" class="in" placeholder="例: 晚餐" value="${esc(e.title)}" required></div>
+  <div class="grid grid-cols-2 gap-2"><div><label class="lbl">金額</label><div class="flex gap-1"><input name="amount" type="number" step="any" min="0.01" class="in min-w-0" placeholder="1500" value="${e.amount ?? ''}" required>${curSel(e.currency)}</div></div>
+  <div><label class="lbl">日期</label><input name="date" type="date" class="in" value="${e.spent_on || today()}" required></div></div>
+  <div class="grid grid-cols-2 gap-2"><div><label class="lbl">分類</label><select name="category" class="in">${opts(CATS, e.category || 'food')}</select></div><div><label class="lbl">實際付款人</label>${payerSel(e.payer)}</div></div>
+  <div><label class="lbl">分帳模式</label><select name="mode" class="in bg-slate-50">${opts(MODES, e.split_mode || 'normal')}</select></div>
+  <div><label class="lbl">參與分攤成員</label>${partsBox(e.participants || L.members)}</div>
+  <button class="${EB}">${id ? '儲存修改' : '記錄支出並計算分帳'}</button></form>`, 'receipt');
 }
 async function saveExp(ev, id) {
   ev.preventDefault(); const f = new FormData(ev.target);
@@ -180,10 +236,10 @@ async function saveExp(ev, id) {
   const { error } = id ? await sb.from('expenses').update(row).eq('id', id) : await sb.from('expenses').insert(row);
   if (error) return toast(error.message, 1); closeModal(); load();
 }
-async function delExp(id) { if (!confirm('確定刪除這筆花費？')) return; const { error } = await sb.from('expenses').delete().eq('id', id); if (error) return toast(error.message, 1); closeModal(); load(); }
+async function delExp(id) { if (!confirm('確定刪除這筆花費？')) return; const { error } = await sb.from('expenses').delete().eq('id', id); if (error) return toast(error.message, 1); load(); }
 
-/* ---------- 結算 ---------- */
-function transfers(list, c) {
+/* ---------- 結算與還款確認 ---------- */
+function transfers(list, c) {                   // 最少轉帳
   const net = {};
   list.forEach(e => {
     if (e.split_mode === 'self' || !e.payer) return;
@@ -198,44 +254,101 @@ function transfers(list, c) {
   const d = [], k = [], out = [];
   Object.entries(net).forEach(([n, v]) => { if (v < 0) d.push([n, -v]); else if (v > 0) k.push([n, v]); });
   d.sort((a, b) => b[1] - a[1]); k.sort((a, b) => b[1] - a[1]);
-  for (let i = 0, j = 0; i < d.length && j < k.length;) { const m = Math.min(d[i][1], k[j][1]); out.push({ from: d[i][0], to: k[j][0], cents: m, cur: c }); d[i][1] -= m; k[j][1] -= m; if (!d[i][1]) i++; if (!k[j][1]) j++; }
+  for (let i = 0, j = 0; i < d.length && j < k.length;) { const m = Math.min(d[i][1], k[j][1]); out.push({ from: d[i][0], to: k[j][0], cents: m, cur: c, items: [] }); d[i][1] -= m; k[j][1] -= m; if (!d[i][1]) i++; if (!k[j][1]) j++; }
   return out;
 }
+function debts(list, c) {                       // 逐筆拆成「誰欠誰」
+  const out = [];
+  list.forEach(e => {
+    if (e.split_mode === 'self' || !e.payer) return;
+    const t = Math.round(conv(+e.amount, e.currency, c) * 100); if (!(t > 0)) return;
+    let p = [...new Set((e.participants || []).filter(Boolean))];
+    if (e.split_mode === 'payer_excluded') p = p.filter(x => x !== e.payer); else if (!p.includes(e.payer)) p.push(e.payer);
+    if (!p.length) return;
+    const b = Math.floor(t / p.length); let r = t - b * p.length;
+    p.forEach(n => { const s = b + (r-- > 0 ? 1 : 0); if (n !== e.payer) out.push({ from: n, to: e.payer, cents: s, title: e.title, orig: e }); });
+  });
+  return out;
+}
+function pairs(list, c) {                       // 兩人之間互相抵銷，只留淨額
+  const g = {};
+  debts(list, c).forEach(d => { const [x, y] = [d.from, d.to].sort(), k = x + '\u0000' + y, o = g[k] = g[k] || { x, y, xy: 0, yx: 0, items: [] }; if (d.from === x) o.xy += d.cents; else o.yx += d.cents; o.items.push(d); });
+  return Object.values(g).filter(o => o.xy !== o.yx).map(o => { const xo = o.xy > o.yx; return { from: xo ? o.x : o.y, to: xo ? o.y : o.x, cents: Math.abs(o.xy - o.yx), items: o.items, cur: c }; });
+}
 function viewSt() {
+  const head = `<h4 class="text-xs font-bold text-slate-700 flex items-center justify-between"><span class="flex items-center gap-1"><i class="fa-solid fa-scale-balanced text-amber-600"></i> 智慧結算建議與還款確認</span><span class="text-[9px] text-slate-400 font-normal">付款人勾「已付款」、收款人勾「已收款」</span></h4>`;
+  if (dc() !== 'SPLIT' && !rate() && ex.some(e => e.currency !== dc())) return `<div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">${head}<p class="text-[11px] text-slate-500">帳目含不同幣別，請先到「設定」輸入匯率，或把結算幣別改為「分開計算」。</p></div>`;
   const groups = dc() === 'SPLIT' ? ['TWD', 'JPY'].map(c => [c, ex.filter(e => e.currency === c)]) : [[dc(), ex]];
-  if (dc() !== 'SPLIT' && !rate() && ex.some(e => e.currency !== dc())) return '<div class="card text-sm">帳目含不同幣別，請先到「設定」輸入匯率，或把結算幣別改為「分開計算」。</div>';
-  return groups.map(([c, list]) => {
-    const ts = transfers(list, c), has = (k, r) => cf.some(x => x.key === k && x.role === r);
-    return `<div class="card mb-3"><div class="serif mb-2">${c === 'JPY' ? '日圓' : '台幣'}結算建議</div>` + (ts.map(t => {
-      const k = JSON.stringify([t.from, t.to, t.cents, c]), box = (r, l) => `<label class="flex items-center gap-1"><input type="checkbox" class="accent-[#2f6b4f]" data-k="${esc(k)}" data-r="${r}" ${has(k, r) ? 'checked' : ''} onchange="toggleCf(this)">${l}</label>`, done = has(k, 'paid') && has(k, 'received');
-      return `<div class="tear py-2 ${done ? 'opacity-50' : ''}"><div class="flex justify-between text-sm"><span>${esc(t.from)} → ${esc(t.to)}</span><span class="num font-bold">${fmt(t.cents / 100, c)}</span></div><div class="flex gap-4 text-xs text-[#6b6a5e] mt-1">${box('paid', '已付款')}${box('received', '已收款')}${done ? '<span class="text-[#2f6b4f]">✓ 已結清</span>' : ''}</div></div>`;
-    }).join('') || '<p class="text-sm text-[#6b6a5e]">目前沒有待結算款項 🎉</p>') + '</div>';
-  }).join('') + '<p class="text-xs text-[#6b6a5e]">金額或幣別變動後，舊的確認紀錄會自動失效。</p>';
+  const mine = L.members.filter(n => links()[n] === user.id);
+  const note = multi() ? (mine.length ? `<p class="text-[10px] text-slate-500">你的身分：<b>${mine.map(esc).join('、')}</b>，只能勾選自己的欄位。</p>` : '<p class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">你的帳號還沒對應到任何成員名稱，目前不能勾選。請擁有者到「設定」的「成員與帳號對應」處理。</p>') : '';
+  const bar = `<div class="flex gap-1.5 text-[11px]">${[['pair', '依品項對帳'], ['min', '最少轉帳']].map(([k, n]) => `<button onclick="smode='${k}';render()" class="tab ${smode === k ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-600 border-slate-200'}">${n}</button>`).join('')}</div>`;
+  return `<div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">${head}${bar}${note}<div class="space-y-1.5 text-[11px]">${groups.map(([c, list]) => stBlock(list, c, groups.length > 1)).join('')}</div><p class="text-[9px] text-slate-400">金額或幣別變動後，舊的確認會自動失效，需要重新勾選。</p></div>`;
+}
+function stBlock(list, c, multiCur) {
+  const ts = (smode === 'pair' ? pairs : transfers)(list, c), F = n => fmt(n / 100, c), cname = c === 'JPY' ? '日圓' : '台幣';
+  const rec = (k, r) => cf.find(x => x.key === k && x.role === r), keyOf = t => JSON.stringify([t.from, t.to, t.cents, c]);
+  const done = t => { const k = keyOf(t); return !!(rec(k, 'paid') && rec(k, 'received')); };
+  const h = multiCur ? `<div class="font-bold text-slate-700 border-b border-slate-200 pb-1 pt-1">${cname}結算</div>` : '';
+  if (!ts.length) return h + '<p class="text-slate-400 text-center py-2">目前沒有待結算的分帳款項</p>';
+  const total = ts.reduce((s, t) => s + t.cents, 0), open = ts.filter(t => !done(t)).reduce((s, t) => s + t.cents, 0), sum = {}, by = {};
+  ts.forEach(t => { (sum[t.from] = sum[t.from] || { pay: 0, recv: 0 }).pay += t.cents; (sum[t.to] = sum[t.to] || { pay: 0, recv: 0 }).recv += t.cents; (by[t.from] = by[t.from] || []).push(t); });
+  const box = (t, r, label, who) => {
+    const k = keyOf(t), x = rec(k, r), can = canConfirm(who);
+    return `<label class="flex items-center gap-1 ${can ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}" title="${can ? '' : esc('只有「' + who + '」本人可以勾選')}"><input type="checkbox" data-k="${esc(k)}" data-r="${r}" data-w="${esc(who)}" ${x ? 'checked' : ''} ${can ? '' : 'disabled'} onchange="toggleCf(this)" class="w-4 h-4 accent-amber-600"><span class="font-bold">${label}</span><span class="text-[9px] text-slate-400">（由${r === 'paid' ? '付款人' : '收款人'} ${esc(who)} 確認${x ? '・' + fdt(x.created_at) : ''}）</span></label>`;
+  };
+  const line = (t, a, b) => t.items.filter(i => i.from === a && i.to === b).map(i => `${esc(a)} 欠 ${esc(b)}：${esc(i.title)} ${F(i.cents)}${i.orig.currency !== c ? `（原 ${fmt(i.orig.amount, i.orig.currency)}）` : ''}`).join('；');
+  let html = h + `<div class="bg-amber-50 border border-amber-200 rounded-lg p-2 flex justify-between"><span>尚未雙方確認結清（${cname}）</span><span class="font-bold text-amber-700">${F(open)} / ${F(total)}</span></div>`;
+  Object.keys(by).sort().forEach(d => {
+    html += `<div class="border border-slate-200 rounded-lg overflow-hidden"><div class="bg-slate-100 px-2 py-1 font-bold text-slate-700 flex justify-between"><span>${esc(d)} 應付</span><span>${F(sum[d].pay)}</span></div>`;
+    by[d].sort((a, b) => a.to.localeCompare(b.to)).forEach(t => {
+      const k = keyOf(t), p = rec(k, 'paid'), r = rec(k, 'received'), both = !!(p && r);
+      const back = line(t, t.to, t.from), detail = [line(t, t.from, t.to), back].filter(Boolean).join('<br>') + (back ? '<br>→ 互相抵銷後如上' : '');
+      const status = both ? '<span class="text-emerald-600 font-bold">✓ 雙方已互相確認，已結清</span>' : p ? '<span class="text-amber-600">付款人已標記付款，等待收款人確認已收款</span>' : r ? '<span class="text-amber-600">收款人已標記收款，等待付款人確認已付款</span>' : '';
+      html += `<div class="px-2 py-1.5 border-t border-slate-100 ${both ? 'bg-emerald-50/70' : ''}"><div class="flex items-center justify-between"><span class="${both ? 'line-through text-slate-400' : 'font-bold text-slate-800'}">${esc(t.from)} 需支付給 ${esc(t.to)}</span><span class="font-bold text-emerald-700 whitespace-nowrap">${F(t.cents)}</span></div>
+      <div class="flex flex-wrap gap-x-4 gap-y-0.5 mt-1 text-[11px] text-slate-700">${box(t, 'paid', '已付款', t.from)}${box(t, 'received', '已收款', t.to)}</div>
+      ${status ? `<p class="text-[10px] mt-0.5">${status}</p>` : ''}${detail ? `<p class="text-[9px] text-slate-400 leading-relaxed">${detail}</p>` : ''}</div>`;
+    });
+    html += '</div>';
+  });
+  html += '<div class="border border-slate-200 rounded-lg overflow-hidden"><div class="bg-slate-100 px-2 py-1 font-bold text-slate-700">每人收支總表</div>' + Object.keys(sum).sort().map(n => { const v = sum[n], net = v.recv - v.pay; return `<div class="px-2 py-1 border-t border-slate-100 flex justify-between"><span class="font-bold">${esc(n)}</span><span class="text-[10px] text-slate-500">應付 ${F(v.pay)}｜應收 ${F(v.recv)}</span><span class="font-bold ${net > 0 ? 'text-emerald-600' : net < 0 ? 'text-red-500' : 'text-slate-400'}">${net > 0 ? '+' : ''}${F(net)}</span></div>`; }).join('') + '</div>';
+  return html;
 }
 async function toggleCf(el) {
+  if (!canConfirm(el.dataset.w)) { el.checked = !el.checked; return toast('只有「' + el.dataset.w + '」本人可以勾選', 1); }
   const row = { ledger_id: L.id, key: el.dataset.k, role: el.dataset.r };
   const { error } = el.checked ? await sb.from('settlements').insert(row) : await sb.from('settlements').delete().match(row);
-  if (error) toast(error.message, 1); load();
+  if (error) { el.checked = !el.checked; toast(error.message, 1); } load();
+}
+async function setLink(i, uid) {
+  const l = { ...links() }, n = L.members[i];
+  if (uid) { Object.keys(l).forEach(k => l[k] === uid && delete l[k]); l[n] = uid; } else delete l[n];   // 一個帳號只對應一個名稱
+  const { data, error } = await sb.from('ledgers').update({ member_links: l }).eq('id', L.id).select().single();
+  if (error) return toast(error.message, 1); Object.assign(L, data); toast('已更新對應'); render();
 }
 
 /* ---------- 購物計劃 ---------- */
 function viewSh() {
-  const todo = sh.filter(i => !i.bought), list = sh.filter(i => sf === 'all' || (sf === 'todo' ? !i.bought : i.bought));
-  return `<div class="flex items-center justify-between mb-2"><div class="text-sm">未購買 ${todo.length} 項 · 預計 <b class="num">${sumStr(todo.map(i => ({ amount: i.amount, currency: i.currency })))}</b></div><button class="btn !py-1.5" onclick="shForm()">＋ 新增</button></div>
-  <div class="flex gap-1.5 mb-2">${[['all', '全部'], ['todo', '未購買'], ['done', '已購買']].map(([k, n]) => `<button class="chip flex-1 ${sf === k ? 'on' : ''}" onclick="sf='${k}';render()">${n}</button>`).join('')}</div>
-  <div class="space-y-2">${list.map(i => `<div class="card flex gap-2.5 items-center ${i.bought ? 'opacity-60' : ''}"><input type="checkbox" class="w-5 h-5 accent-[#2f6b4f]" ${i.bought ? 'checked' : ''} onchange="setBought('${i.id}',this)">
-  <button class="flex-1 min-w-0 text-left flex gap-2.5 items-center" onclick="shForm('${i.id}')">${i.image_path && urls[i.image_path] ? `<img src="${urls[i.image_path]}" class="w-14 h-14 rounded-lg object-cover flex-shrink-0">` : '<div class="w-14 h-14 rounded-lg bg-[#ece4d2] flex items-center justify-center text-xl flex-shrink-0">🛍️</div>'}
-  <div class="min-w-0"><div class="text-sm ${i.bought ? 'line-through' : ''} truncate">${esc(i.name)}${+i.qty > 1 ? ' ×' + i.qty : ''}</div><div class="text-[11px] text-[#6b6a5e] truncate">${esc(i.place || '未填地點')}${i.planned_on ? ' · ' + i.planned_on : ''}</div><div class="num text-sm font-bold">${fmt(i.amount, i.currency)}</div></div></button></div>`).join('') || '<p class="text-center text-sm text-[#6b6a5e] py-8">清單是空的</p>'}</div>`;
+  const todo = sh.filter(i => !i.bought), done = sh.filter(i => i.bought), toL = a => a.map(i => ({ amount: i.amount, currency: i.currency }));
+  const list = sh.filter(i => sf === 'all' || (sf === 'todo' ? !i.bought : i.bought)).sort((a, b) => (a.bought - b.bought) || String(a.planned_on || '9999').localeCompare(String(b.planned_on || '9999')) || a.name.localeCompare(b.name));
+  return pageHead('bag-shopping', 'text-pink-600', '購物計劃', `<button onclick="shForm()" class="sbtn bg-pink-600">＋ 新增</button>`) +
+  `<div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-[11px] space-y-1"><div class="flex justify-between"><span class="text-slate-500">未購買（${todo.length} 項）預計</span><span class="font-bold text-pink-700">${sumStr(toL(todo))}</span></div><div class="flex justify-between"><span class="text-slate-500">已購買（${done.length} 項）</span><span class="font-bold text-emerald-700">${sumStr(toL(done))}</span></div></div>
+  <div class="flex gap-1.5 text-[11px]">${[['all', '全部'], ['todo', '未購買'], ['done', '已購買']].map(([k, n]) => `<button onclick="sf='${k}';render()" class="tab ${sf === k ? 'bg-pink-600 text-white border-pink-600' : 'bg-white text-slate-600 border-slate-200'}">${n}</button>`).join('')}</div>
+  <div class="space-y-2">${list.map(i => `<div onclick="shForm('${i.id}')" class="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex gap-2.5 cursor-pointer ${i.bought ? 'opacity-70' : ''}">
+    <div class="w-16 h-16 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0 flex items-center justify-center text-xl">${i.image_path && urls[i.image_path] ? `<img src="${urls[i.image_path]}" class="w-full h-full object-cover">` : '🛍️'}</div>
+    <div class="min-w-0 flex-1 text-xs"><div class="flex items-start justify-between gap-1"><h4 class="font-bold truncate ${i.bought ? 'line-through text-slate-400' : 'text-slate-800'}">${esc(i.name)}</h4><button onclick="event.stopPropagation();delSh('${i.id}')" class="text-slate-300 hover:text-red-500 p-0.5 flex-shrink-0">🗑</button></div>
+    <p class="text-[10px] text-slate-500">${fmt(+i.price || 0, i.currency)} × ${i.qty} = <b class="text-slate-800">${fmt(+i.amount || 0, i.currency)}</b></p>
+    <p class="text-[10px] text-slate-500 truncate">${i.place ? '📍' + esc(i.place) : ''}${i.place && i.planned_on ? '　' : ''}${i.planned_on ? '📅' + i.planned_on : ''}</p>
+    <label class="inline-flex items-center gap-1 mt-1 cursor-pointer" onclick="event.stopPropagation()"><input type="checkbox" ${i.bought ? 'checked' : ''} onchange="setBought('${i.id}',this)" class="w-4 h-4 accent-emerald-600"><span class="font-bold">已購買</span>${i.bought ? '<span class="text-[9px] text-emerald-600">已加入花費</span>' : ''}</label></div></div>`).join('') || '<div class="text-center py-8 text-slate-400 bg-white rounded-xl text-xs border border-slate-200">還沒有購物項目，點右上角「＋ 新增」</div>'}</div>`;
 }
 function shForm(id) {
   const i = sh.find(x => x.id === id) || {};
-  openModal(`<form class="space-y-2.5" onsubmit="saveSh(event,'${id || ''}')"><h3 class="serif text-lg">${id ? '編輯購物項目' : '新增購物項目'}</h3>
-  <input name="name" class="in" placeholder="物品名稱" value="${esc(i.name)}" required>
-  <div class="grid grid-cols-3 gap-2"><input name="price" type="number" step="any" min="0" class="in" placeholder="單價" value="${i.price ?? ''}" oninput="shAuto(this.form)"><input name="qty" type="number" step="any" min="0.01" class="in" placeholder="數量" value="${i.qty ?? 1}" oninput="shAuto(this.form)"><select name="currency" class="in"><option value="TWD">台幣</option><option value="JPY" ${i.currency === 'JPY' ? 'selected' : ''}>日圓</option></select></div>
-  <div><label class="lbl">金額（預設 = 單價 × 數量，可手動改）</label><input name="amount" type="number" step="any" min="0" class="in" value="${i.amount ?? ''}" oninput="this.dataset.d=1"></div>
-  <div class="grid grid-cols-2 gap-2"><input name="place" class="in" placeholder="購買地點" value="${esc(i.place)}"><input name="date" type="date" class="in" value="${i.planned_on || ''}"></div>
-  <div><label class="lbl">照片（自動壓縮後存到雲端）</label><input name="img" type="file" accept="image/*" class="in !p-1.5 text-xs"></div>
-  <div class="flex gap-2"><button class="btn flex-1">儲存</button>${id ? `<button type="button" class="ghost text-[#c8452d]" onclick="delSh('${id}')">刪除</button>` : ''}</div></form>`);
+  openModal(id ? '編輯購物項目' : '新增購物項目', `<form class="space-y-2.5" onsubmit="saveSh(event,'${id || ''}')">
+  <div><label class="lbl">物品名稱</label><input name="name" class="in" placeholder="例: 抹茶巧克力" value="${esc(i.name)}" required></div>
+  <div class="grid grid-cols-3 gap-2"><div><label class="lbl">單價</label><input name="price" type="number" step="any" min="0" class="in" value="${i.price ?? ''}" oninput="shAuto(this.form)"></div><div><label class="lbl">數量</label><input name="qty" type="number" step="any" min="0.01" class="in" value="${i.qty ?? 1}" oninput="shAuto(this.form)"></div><div><label class="lbl">幣別</label><select name="currency" class="in bg-slate-50"><option value="TWD">台幣</option><option value="JPY" ${i.currency === 'JPY' ? 'selected' : ''}>日圓</option></select></div></div>
+  <div><label class="lbl">金額 <span class="font-normal text-slate-400">(預設 = 單價 × 數量，可手動修改)</span></label><input name="amount" type="number" step="any" min="0" class="in" value="${i.amount ?? ''}" oninput="this.dataset.d=1"></div>
+  <div class="grid grid-cols-2 gap-2"><div><label class="lbl">購買地點</label><input name="place" class="in" placeholder="例: 京都車站" value="${esc(i.place)}"></div><div><label class="lbl">購買日期</label><input name="date" type="date" class="in" value="${i.planned_on || ''}"></div></div>
+  <div><label class="lbl">商品照片 <span class="font-normal text-slate-400">(自動壓縮後存到雲端)</span></label><input name="img" type="file" accept="image/*" class="w-full border border-slate-200 rounded p-1 bg-slate-50"></div>
+  <button class="${PB}">${id ? '儲存修改' : '新增項目'}</button></form>`, 'bag-shopping');
 }
 function shAuto(f) { const a = f.amount; if (a.dataset.d) return; const v = (+f.price.value || 0) * (+f.qty.value || 0); a.value = v ? Math.round(v * 100) / 100 : ''; }
 async function compress(file) { const b = await createImageBitmap(file), s = Math.min(1, 1280 / Math.max(b.width, b.height)), c = document.createElement('canvas'); c.width = b.width * s; c.height = b.height * s; c.getContext('2d').drawImage(b, 0, 0, c.width, c.height); return new Promise(r => c.toBlob(r, 'image/jpeg', .8)); }
@@ -256,17 +369,18 @@ async function saveSh(ev, id) {
 async function delSh(id) {
   const i = sh.find(x => x.id === id); if (!confirm(i.bought ? `刪除「${i.name}」？對應的花費也會一併刪除。` : `刪除「${i.name}」？`)) return;
   const { error } = await sb.from('shopping_items').delete().eq('id', id); if (error) return toast(error.message, 1);
-  if (i.image_path) sb.storage.from(BUCKET).remove([i.image_path]); closeModal(); load();
+  if (i.image_path) sb.storage.from(BUCKET).remove([i.image_path]); load();
 }
 async function setBought(id, el) {
   const i = sh.find(x => x.id === id);
   if (el.checked) {
-    if (!(+i.amount > 0)) { el.checked = false; return toast('金額需大於 0 才能加入花費', 1); }
-    if (!L.members.length) { el.checked = false; return toast('請先到「設定」新增成員', 1); }
     el.checked = false;
-    return openModal(`<form class="space-y-2.5" onsubmit="buy(event,'${id}')"><h3 class="serif text-lg">買到了：${esc(i.name)}</h3><p class="text-sm text-[#6b6a5e]">會自動新增一筆 ${fmt(i.amount, i.currency)} 的花費</p>
-    <input name="date" type="date" class="in" value="${today()}" required>${payerSel(nick())}<select name="mode" class="in">${opts(MODES, 'self')}</select>
-    <div><label class="lbl">分攤成員</label>${partsBox(L.members)}</div><button class="btn w-full">確認並記帳</button></form>`);
+    if (!(+i.amount > 0)) return toast('金額必須大於 0 才能加入花費', 1);
+    if (!L.members.length) return toast('請先到「設定」新增成員', 1);
+    return openModal('買到了：' + esc(i.name), `<form class="space-y-2.5" onsubmit="buy(event,'${id}')"><p class="text-slate-500">將自動新增一筆 <b class="text-emerald-600">${fmt(i.amount, i.currency)}</b> 的花費</p>
+    <div class="grid grid-cols-2 gap-2"><div><label class="lbl">購買日期</label><input name="date" type="date" class="in" value="${today()}" required></div><div><label class="lbl">實際付款人</label>${payerSel(nick())}</div></div>
+    <div><label class="lbl">分帳模式</label><select name="mode" class="in bg-slate-50">${opts(MODES, 'self')}</select></div>
+    <div><label class="lbl">參與分攤成員</label>${partsBox(L.members)}</div><button class="${EB}">確認並記帳</button></form>`, 'cart-shopping');
   }
   if (i.expense_id && !confirm('取消「已購買」會一併刪除對應的花費，確定嗎？')) return render();
   const { error } = i.expense_id ? await sb.from('expenses').delete().eq('id', i.expense_id) : await sb.from('shopping_items').update({ bought: false }).eq('id', id);
@@ -283,21 +397,25 @@ async function buy(ev, id) {
 
 /* ---------- 設定 ---------- */
 function viewCfg() {
-  return `<form class="card space-y-2.5" onsubmit="saveCfgLedger(event)"><div class="serif">帳本設定</div>
-  <div><label class="lbl">名稱</label><input name="t" class="in" value="${esc(L.title)}" required></div>
-  <div><label class="lbl">預算（台幣，0 = 無預算）</label><input name="b" type="number" min="0" class="in" value="${L.budget}"></div>
-  <div><label class="lbl">分帳成員（逗號分隔，可包含沒有帳號的人）</label><input name="m" class="in" value="${esc(L.members.join(', '))}"></div>
-  <div><label class="lbl">結算幣別</label><select name="d" class="in"><option value="TWD" ${dc() === 'TWD' ? 'selected' : ''}>台幣</option><option value="JPY" ${dc() === 'JPY' ? 'selected' : ''}>日圓</option><option value="SPLIT" ${dc() === 'SPLIT' ? 'selected' : ''}>分開計算（不換算）</option></select></div>
-  <div><label class="lbl">匯率：1 日圓 = ? 台幣</label><div class="flex gap-2"><input name="r" type="number" step="any" min="0" class="in" value="${L.jpy_rate ?? ''}"><button type="button" class="ghost whitespace-nowrap" onclick="autoRate(this.form)">自動取得</button></div></div>
-  <button class="btn w-full">儲存設定</button></form>
-  <div class="card mt-3"><div class="serif mb-2">共編者</div><div id="collab" class="text-sm space-y-1 mb-2">載入中…</div>${isOwner() ? `<form class="flex gap-2" onsubmit="addCollab(event)"><input name="e" type="email" class="in" placeholder="對方註冊的 Email" required><button class="btn whitespace-nowrap">邀請</button></form>` : ''}</div>
-  <div class="flex gap-2 mt-3"><button class="ghost flex-1" onclick="exportCsv()">匯出 CSV</button>${isOwner() ? '<button class="ghost flex-1 text-[#c8452d]" onclick="delLedger()">刪除帳本</button>' : ''}</div>`;
+  return pageHead('gear', 'text-slate-600', '帳本設定') +
+  `<form class="card space-y-2.5" onsubmit="saveCfgLedger(event)">
+  <div><label class="lbl">帳本名稱</label><input name="t" class="in" value="${esc(L.title)}" required></div>
+  <div><label class="lbl">預算 (TWD，0 = 無預算)</label><input name="b" type="number" min="0" class="in" value="${L.budget}"></div>
+  <div><label class="lbl">分帳成員 (逗號分隔，可包含沒有帳號的人)</label><input name="m" class="in" value="${esc(L.members.join(', '))}"></div>
+  <div><label class="lbl">結算幣別</label><select name="d" class="in bg-slate-50"><option value="TWD" ${dc() === 'TWD' ? 'selected' : ''}>台幣</option><option value="JPY" ${dc() === 'JPY' ? 'selected' : ''}>日圓</option><option value="SPLIT" ${dc() === 'SPLIT' ? 'selected' : ''}>分開計算 (不換算)</option></select></div>
+  <div><label class="lbl">匯率：1 日圓 = ? 台幣</label><div class="flex gap-2"><input name="r" type="number" step="any" min="0" class="in" value="${L.jpy_rate ?? ''}"><button type="button" onclick="autoRate(this.form)" class="px-2.5 border border-slate-200 rounded bg-slate-50 font-bold text-slate-600 whitespace-nowrap">自動取得</button></div></div>
+  <button class="${EB}">儲存設定</button></form>
+  <div class="card"><h4 class="text-xs font-bold text-slate-700 mb-2"><i class="fa-solid fa-user-group text-sky-600"></i> 共編者</h4><div id="collab" class="space-y-1 mb-2">載入中…</div>${isOwner() ? `<form class="flex gap-2" onsubmit="addCollab(event)"><input name="e" type="email" class="in" placeholder="對方註冊的 Email" required><button class="sbtn bg-sky-600 !px-3">邀請</button></form>` : ''}</div>
+  <div class="card"><h4 class="text-xs font-bold text-slate-700 mb-1"><i class="fa-solid fa-link text-amber-600"></i> 成員與帳號對應</h4><p class="text-[10px] text-slate-500 mb-2">對應後，還款確認只有本人帳號能勾選自己的欄位。${isOwner() ? '' : '（僅擁有者可修改）'}</p>
+  ${L.members.map((m, i) => `<div class="flex items-center justify-between gap-2 py-1"><span class="truncate font-bold">${esc(m)}</span><select class="border border-slate-200 rounded p-1 bg-slate-50 w-40" ${isOwner() ? '' : 'disabled'} onchange="setLink(${i},this.value)"><option value="">未對應</option>${collab.map(u => `<option value="${u.user_id}" ${links()[m] === u.user_id ? 'selected' : ''}>${esc(u.nickname || u.email)}</option>`).join('')}</select></div>`).join('') || '<p class="text-slate-400">尚無成員</p>'}</div>
+  <div class="flex gap-2"><button onclick="exportCsv()" class="flex-1 py-2 rounded-lg border border-slate-200 bg-white font-bold text-slate-600"><i class="fa-solid fa-file-csv mr-1"></i>匯出 CSV</button>${isOwner() ? '<button onclick="delLedger()" class="flex-1 py-2 rounded-lg border border-red-200 bg-white font-bold text-red-500"><i class="fa-solid fa-trash mr-1"></i>刪除帳本</button>' : ''}</div>`;
 }
 async function saveCfgLedger(e) {
   e.preventDefault(); const f = new FormData(e.target);
   const row = { title: f.get('t').trim(), budget: +f.get('b') || 0, members: [...new Set(f.get('m').split(/[,，]/).map(s => s.trim()).filter(Boolean))], display_currency: f.get('d'), jpy_rate: +f.get('r') || null };
+  if (isOwner()) row.member_links = Object.fromEntries(Object.entries(links()).filter(([n]) => row.members.includes(n)));
   const { data, error } = await sb.from('ledgers').update(row).eq('id', L.id).select().single();
-  if (error) return toast(error.message, 1); Object.assign(L, data); toast('已儲存'); render();
+  if (error) return toast(error.message, 1); Object.assign(L, data); toast('設定已儲存'); render();
 }
 async function autoRate(f) {
   try { const j = await (await fetch('https://open.er-api.com/v6/latest/JPY')).json(); if (!(j.rates && j.rates.TWD)) throw 0; f.r.value = j.rates.TWD; toast('已填入市場參考匯率，記得儲存'); }
@@ -305,10 +423,10 @@ async function autoRate(f) {
 }
 async function loadCollab() {
   const { data, error } = await sb.rpc('ledger_collaborators', { lid: L.id }), box = $('#collab'); if (!box) return;
-  box.innerHTML = error ? esc(error.message) : data.map(u => `<div class="flex justify-between"><span>${esc(u.nickname || '')} <span class="text-[#6b6a5e]">${esc(u.email)}</span></span>${isOwner() && u.user_id !== user.id ? `<button class="text-[#c8452d]" onclick="rmCollab('${u.user_id}')">移除</button>` : u.user_id === L.owner_id ? '<span class="text-xs text-[#6b6a5e]">擁有者</span>' : ''}</div>`).join('');
+  box.innerHTML = error ? esc(error.message) : data.map(u => `<div class="flex justify-between items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5"><span>${esc(u.nickname || '')} <span class="text-slate-400">${esc(u.email)}</span></span>${isOwner() && u.user_id !== user.id ? `<button class="text-red-500" onclick="rmCollab('${u.user_id}')">移除</button>` : u.user_id === L.owner_id ? '<span class="text-[10px] text-amber-600 font-bold">擁有者</span>' : ''}</div>`).join('');
 }
-async function addCollab(e) { e.preventDefault(); const { error } = await sb.rpc('add_collaborator', { lid: L.id, mail: new FormData(e.target).get('e') }); if (error) return toast(error.message, 1); toast('已加入共編'); e.target.reset(); loadCollab(); }
-async function rmCollab(uid) { if (!confirm('移除這位共編者？')) return; const { error } = await sb.rpc('remove_collaborator', { lid: L.id, uid }); if (error) return toast(error.message, 1); loadCollab(); }
+async function addCollab(e) { e.preventDefault(); const { error } = await sb.rpc('add_collaborator', { lid: L.id, mail: new FormData(e.target).get('e') }); if (error) return toast(error.message, 1); toast('已加入共編'); e.target.reset(); load(); }
+async function rmCollab(uid) { if (!confirm('移除這位共編者？')) return; const { error } = await sb.rpc('remove_collaborator', { lid: L.id, uid }); if (error) return toast(error.message, 1); load(); }
 async function delLedger() {
   if (prompt(`刪除後無法復原。請輸入帳本名稱「${L.title}」確認：`) !== L.title) return;
   const { data } = await sb.storage.from(BUCKET).list(L.id); if (data && data.length) await sb.storage.from(BUCKET).remove(data.map(f => L.id + '/' + f.name));
