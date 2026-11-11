@@ -95,8 +95,8 @@ function sumStr(list, div = 1) {            // 依結算幣別加總；SPLIT 則
   const t = list.reduce((s, e) => s + conv(+e.amount, e.currency, dc()), 0) / div;
   return isNaN(t) ? '需設定匯率' : fmt(t, dc());
 }
-const banner = inner => `<div class="space-y-4 relative rounded-2xl p-4 overflow-hidden shadow-md" style="background:${ui('bg') ? `linear-gradient(to bottom,rgba(15,23,42,.5),rgba(15,23,42,.88)),url('${ui('bg')}') center/cover` : 'linear-gradient(to bottom,rgba(15,23,42,.8),rgba(15,23,42,.92)),linear-gradient(135deg,#d97706,#0f172a)'}">
-  <div class="text-center space-y-2 relative z-10 pt-2 text-white"><div class="w-16 h-16 bg-gradient-to-tr from-amber-500 to-orange-400 text-white rounded-3xl mx-auto flex items-center justify-center text-2xl shadow-lg overflow-hidden">${ui('icon') ? `<img src="${ui('icon')}" class="w-full h-full object-cover">` : '<i class="fa-solid fa-wallet"></i>'}</div>
+const banner = inner => `<div class="space-y-4 relative rounded-2xl p-4 overflow-hidden shadow-md" style="background:${ui('bg') ? `url('${ui('bg')}') center/cover` : 'linear-gradient(to bottom,rgba(15,23,42,.8),rgba(15,23,42,.92)),linear-gradient(135deg,#d97706,#0f172a)'}">
+  <div class="text-center space-y-2 relative z-10 pt-2 text-white" style="${ui('bg') ? 'text-shadow:0 1px 4px rgba(0,0,0,.8),0 0 2px rgba(0,0,0,.6)' : ''}"><div class="w-16 h-16 bg-gradient-to-tr from-amber-500 to-orange-400 text-white rounded-3xl mx-auto flex items-center justify-center text-2xl shadow-lg overflow-hidden">${ui('icon') ? `<img src="${ui('icon')}" class="w-full h-full object-cover">` : '<i class="fa-solid fa-wallet"></i>'}</div>
   <h2 class="text-xl font-extrabold tracking-wide">帳本</h2><p class="text-xs text-slate-300">記錄每一筆花費，輕鬆分帳與結算</p></div>
   <div class="space-y-3 pt-2 relative z-10">${inner}</div></div>`;
 const wcard = 'bg-white/95 backdrop-blur-sm border border-white/20 p-4 rounded-2xl shadow-sm text-slate-800';
@@ -138,7 +138,7 @@ async function auth(e, signup) {
 function acctModal() {
   openModal('雲端帳號', `<div class="space-y-3"><div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5"><p class="font-bold text-slate-800">${esc(nick())}</p><p class="text-[10px] text-slate-500">${esc(user.email)}</p></div>
   <p class="text-[10px] text-slate-500"><i class="fa-solid fa-circle text-emerald-500 text-[8px] mr-1"></i>已連線，資料會即時同步給共編者</p>
-  <div class="space-y-1.5"><p class="font-bold text-slate-700">外觀</p>${imgRow('icon', '小圖示', '頂欄與首頁的圖示，自動裁成正方形')}${imgRow('bg', '首頁背景圖', '首頁橫幅的背景')}<p class="text-[10px] text-slate-400">圖片會同步到你的帳號，在任何裝置登入後都會套用。</p></div>
+  <div class="space-y-1.5"><p class="font-bold text-slate-700">外觀</p>${imgRow('icon', '小圖示', '頂欄與首頁的圖示，自動裁成正方形')}${imgRow('bg', '首頁背景圖', '自訂後會移除黑色遮罩，顯示原圖')}<p class="text-[10px] text-slate-400">圖片會同步到你的帳號，在任何裝置登入後都會套用。</p></div>
   ${standalone() ? '' : `<button class="btn bg-amber-500" onclick="installApp()"><i class="fa-solid fa-download mr-1"></i>安裝到主畫面</button>`}
   <button class="btn bg-slate-700" onclick="sb.auth.signOut();closeModal()">登出</button>
   <button class="w-full text-slate-400 underline text-[10px]" onclick="localStorage.removeItem('sb_url');localStorage.removeItem('sb_key');location.reload()">清除本機的 Supabase 設定</button></div>`, 'user-circle');
@@ -146,7 +146,7 @@ function acctModal() {
 
 /* ---------- 帳本列表（首頁） ---------- */
 async function loadLedgers() {
-  const { data, error } = await sb.from('ledgers').select('*').order('created_at', { ascending: false });
+  const { data, error } = await sb.from('ledgers').select('id,owner_id,title,budget,members,display_currency,jpy_rate,member_links,created_at').order('created_at', { ascending: false });
   if (error) return toast(error.message, 1);
   ledgers = data; await syncUI(); viewHome();
 }
@@ -155,7 +155,7 @@ function viewHome() {
   L = null; if (ch) { sb.removeChannel(ch); ch = null; } $('#nav').classList.add('hidden'); hdr('帳本', '點擊返回首頁');
   $('#app').innerHTML = banner(`<div onclick="newLedgerModal()" class="bg-gradient-to-r from-amber-500 to-amber-600 text-white p-4 rounded-2xl shadow-md cursor-pointer active:scale-95 transition flex items-center justify-between">
     <div class="flex items-center space-x-3"><div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-lg"><i class="fa-solid fa-circle-plus"></i></div><div><h3 class="text-sm font-bold">新增帳本</h3><p class="text-[10px] text-amber-100">建立新帳本，開始記帳與分帳</p></div></div><i class="fa-solid fa-chevron-right text-xs text-amber-200"></i></div>
-    <div class="flex items-center justify-between text-white pt-1"><span class="text-xs font-bold">我的帳本</span><span class="bg-emerald-100 text-emerald-700 text-xs px-2.5 py-0.5 rounded-full font-bold">${ledgers.length}</span></div>
+    <div class="flex items-center justify-between text-white pt-1" style="${ui('bg') ? 'text-shadow:0 1px 4px rgba(0,0,0,.8),0 0 2px rgba(0,0,0,.6)' : ''}"><span class="text-xs font-bold">我的帳本</span><span class="bg-emerald-100 text-emerald-700 text-xs px-2.5 py-0.5 rounded-full font-bold">${ledgers.length}</span></div>
     ${ledgers.map(l => `<div onclick="openLedger('${l.id}')" class="bg-white/95 backdrop-blur-sm border border-white/20 p-4 rounded-2xl shadow-sm cursor-pointer hover:bg-white transition flex items-center justify-between text-slate-800">
       <div class="flex items-center space-x-3 min-w-0"><div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg flex-shrink-0"><i class="fa-solid fa-book"></i></div>
       <div class="min-w-0"><h3 class="text-sm font-bold truncate">${esc(l.title)}</h3><p class="text-[10px] text-slate-500">${l.members.length} 位成員${+l.budget ? ' ・預算 ' + fmt(l.budget, 'TWD') : ''}${l.owner_id === user.id ? '' : ' ・共編'}</p></div></div><i class="fa-solid fa-chevron-right text-xs text-slate-300"></i></div>`).join('') || '<p class="text-center text-slate-300 text-[11px] py-3">還沒有帳本，點上方「新增帳本」開始</p>'}`);
@@ -174,6 +174,7 @@ async function openLedger(id) {
   L = ledgers.find(l => l.id === id); tab = 'ex'; fd = fcat = fp = 'ALL'; sf = 'all'; urls = {};
   if (ch) sb.removeChannel(ch);
   ch = sb.channel('l' + id); ['expenses', 'shopping_items', 'settlements'].forEach(t => ch.on('postgres_changes', { event: '*', schema: 'public', table: t, filter: 'ledger_id=eq.' + id }, load));
+  ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'ledgers', filter: 'id=eq.' + id }, load);
   ch.subscribe(); $('#nav').classList.remove('hidden'); await load();
 }
 async function load() {
@@ -203,7 +204,7 @@ function viewEx() {
   let remain = '無預算';
   if (+L.budget) { const t = ex.reduce((s, e) => s + conv(+e.amount, e.currency, 'TWD'), 0); remain = isNaN(t) ? '需設定匯率' : fmt(L.budget - t, 'TWD'); }
   const dates = [...new Set(ex.map(e => e.spent_on))].sort(), cats = [...new Set([...Object.keys(CATS), ...ex.map(e => e.category)])], pays = [...new Set(ex.map(e => e.payer))].sort();
-  return pageHead('receipt', 'text-emerald-600', '花費記帳與智慧分帳', `<button onclick="expForm()" class="sbtn bg-emerald-600"><i class="fa-solid fa-plus"></i> 新增</button>`) +
+  return bannerBox('exb', 'receipt', 'from-emerald-500 to-teal-600', '花費記帳') + pageHead('receipt', 'text-emerald-600', '花費記帳與智慧分帳', `<button onclick="expForm()" class="sbtn bg-emerald-600"><i class="fa-solid fa-plus"></i> 新增</button>`) +
   `<div class="bg-white p-2.5 rounded-xl border border-slate-200 grid grid-cols-3 gap-1.5 text-[10px]">${fsel('fd', fd, '全部日期', dates.map(d => [d, d]))}${fsel('fcat', fcat, '全部分類', cats.map(k => [k, CATS[k] || k]))}${fsel('fp', fp, '全部付款', pays.map(p => [p, p]))}</div>
   <div class="grid grid-cols-3 gap-2">${[['總支出', sumStr(list), 'text-slate-800'], ['剩餘預算', remain, 'text-emerald-600'], ['人均分攤', sumStr(list, n), 'text-sky-600']].map(([a, b, c]) => `<div class="bg-white p-2 rounded-xl border border-slate-200 text-center shadow-sm"><p class="text-[9px] text-slate-500">${a}</p><p class="text-xs font-bold ${c} mt-0.5 break-words">${b}</p></div>`).join('')}</div>` +
   viewSt() +
@@ -320,7 +321,7 @@ async function setLink(i, uid) {
 function viewSh() {
   const todo = sh.filter(i => !i.bought), done = sh.filter(i => i.bought), toL = a => a.map(i => ({ amount: i.amount, currency: i.currency }));
   const list = sh.filter(i => sf === 'all' || (sf === 'todo' ? !i.bought : i.bought)).sort((a, b) => (a.bought - b.bought) || String(a.planned_on || '9999').localeCompare(String(b.planned_on || '9999')) || a.name.localeCompare(b.name));
-  return pageHead('bag-shopping', 'text-pink-600', '購物計劃', `<button onclick="shForm()" class="sbtn bg-pink-600">＋ 新增</button>`) +
+  return bannerBox('shb', 'bag-shopping', 'from-pink-500 to-rose-500', '購物計劃') + pageHead('bag-shopping', 'text-pink-600', '購物計劃', `<button onclick="shForm()" class="sbtn bg-pink-600">＋ 新增</button>`) +
   `<div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-[11px] space-y-1"><div class="flex justify-between"><span class="text-slate-500">未購買（${todo.length} 項）預計</span><span class="font-bold text-pink-700">${sumStr(toL(todo))}</span></div><div class="flex justify-between"><span class="text-slate-500">已購買（${done.length} 項）</span><span class="font-bold text-emerald-700">${sumStr(toL(done))}</span></div></div>
   <div class="flex gap-1.5 text-[11px]">${[['all', '全部'], ['todo', '未購買'], ['done', '已購買']].map(([k, n]) => `<button onclick="sf='${k}';render()" class="tab ${sf === k ? 'bg-pink-600 text-white border-pink-600' : 'bg-white text-slate-600 border-slate-200'}">${n}</button>`).join('')}</div>
   <div class="space-y-2">${list.map(i => `<div onclick="shForm('${i.id}')" class="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex gap-2.5 cursor-pointer ${i.bought ? 'opacity-70' : ''}">
@@ -429,23 +430,35 @@ function exportCsv() {
 }
 /* ---------- 外觀：自訂小圖示與背景圖（存在個人資料，跨裝置同步） ---------- */
 const COL = { icon: 'icon_data', bg: 'bg_data' };
+const BK = { exb: 'ex_banner_data', shb: 'sh_banner_data' };   // 橫幅：存在帳本上，共編者共用
 const ui = k => { try { return user ? localStorage.getItem('ui_' + user.id + '_' + k) || '' : ''; } catch (e) { return ''; } };
 const setUi = (k, v) => { try { v ? localStorage.setItem('ui_' + user.id + '_' + k, v) : localStorage.removeItem('ui_' + user.id + '_' + k); } catch (e) {} };
 async function syncUI() {                        // 登入後從雲端取回，本機只當快取
-  const { data, error } = await sb.from('profiles').select('icon_data,bg_data').eq('id', user.id).maybeSingle();
+  const { data, error } = await sb.from('profiles').select(Object.values(COL).join(',')).eq('id', user.id).maybeSingle();
   if (error || !data) return applyUI();
-  setUi('icon', data.icon_data); setUi('bg', data.bg_data); applyUI();
+  Object.entries(COL).forEach(([k, c]) => setUi(k, data[c])); applyUI();
 }
 function imgRow(k, name, hint) {
   const v = ui(k);
   return `<div class="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-lg p-2"><div class="w-12 h-12 rounded-lg overflow-hidden bg-slate-200 flex-shrink-0">${v ? `<img src="${v}" class="w-full h-full object-cover">` : '<div class="w-full h-full flex items-center justify-center text-slate-400"><i class="fa-regular fa-image"></i></div>'}</div>
   <div class="min-w-0 flex-1"><p class="font-bold text-slate-800">${name}</p><p class="text-[10px] text-slate-500">${hint}</p></div>
-  <div class="flex flex-col gap-1 items-end"><label class="sbtn bg-amber-500 cursor-pointer">上傳<input type="file" accept="image/*" class="hidden" onchange="pickImg('${k}',this.files[0]);this.value=''"></label>${v ? `<button class="text-[10px] text-slate-400 underline" onclick="resetImg('${k}')">還原預設</button>` : ''}</div></div>`;
+  <div class="flex flex-col gap-1 items-end"><label class="sbtn bg-amber-500 cursor-pointer">上傳<input type="file" accept="image/*" class="hidden" onchange="pickImg('${k}',this.files[0]);this.value=''"></label>${v ? `<button class="text-[10px] px-2 py-1 rounded border border-slate-300 text-slate-600 whitespace-nowrap" onclick="resetImg('${k}')">移除並還原預設</button>` : ''}</div></div>`;
 }
+function bannerBox(k, icon, grad, label) {
+  const v = L[BK[k]] || '', btn = 'bg-black/45 text-white text-[10px] px-2 py-1 rounded-full backdrop-blur-sm cursor-pointer';
+  return `<div class="relative rounded-xl overflow-hidden border border-slate-200 shadow-sm h-24 ${v ? 'bg-slate-200' : 'bg-gradient-to-r ' + grad}">${v ? `<img src="${v}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-white/90 gap-2"><i class="fa-solid fa-${icon} text-xl"></i><span class="font-bold text-sm">${label}</span></div>`}
+  <div class="absolute top-1.5 right-1.5 flex gap-1.5"><label class="${btn}"><i class="fa-solid fa-camera mr-1"></i>${v ? '更換' : '自訂圖片'}<input type="file" accept="image/*" class="hidden" onchange="pickImg('${k}',this.files[0]);this.value=''"></label>${v ? `<button class="${btn}" onclick="resetImg('${k}')"><i class="fa-solid fa-trash mr-1"></i>移除</button>` : ''}</div></div>`;
+}
+async function saveBanner(kind, val) {
+  const col = BK[kind], { data, error } = await sb.from('ledgers').update({ [col]: val }).eq('id', L.id).select(col).single();
+  if (error) { toast(error.message + '（請確認已執行 supabase_ledger_banners.sql）', 1); return false; }
+  L[col] = data[col]; render(); return true;
+}
+const saveImg = (kind, val) => BK[kind] ? saveBanner(kind, val) : saveUi(kind, val);
 async function saveUi(kind, val) {
   const { data, error } = await sb.from('profiles').update({ [COL[kind]]: val }).eq('id', user.id).select('id');
   if (error || !data || !data.length) { toast((error ? error.message : '找不到個人資料') + '（請確認已執行 supabase_profile_images.sql）', 1); return false; }
-  setUi(kind, val); applyUI(); if (!L) viewHome(); acctModal(); return true;
+  setUi(kind, val); applyUI(); L ? render() : viewHome(); if (!$('#modal').classList.contains('hidden') && $('#sheet').innerHTML.includes('外觀')) acctModal(); return true;
 }
 async function pickImg(kind, file) {
   if (!file) return;
@@ -453,11 +466,12 @@ async function pickImg(kind, file) {
   try {
     const b = await createImageBitmap(file), c = document.createElement('canvas'), x = c.getContext('2d');
     if (kind === 'icon') { const m = Math.min(b.width, b.height); c.width = c.height = 192; x.drawImage(b, (b.width - m) / 2, (b.height - m) / 2, m, m, 0, 0, 192, 192); val = c.toDataURL('image/png'); }
-    else { const k = Math.min(1, 900 / b.width); c.width = Math.round(b.width * k); c.height = Math.round(b.height * k); x.drawImage(b, 0, 0, c.width, c.height); val = c.toDataURL('image/jpeg', .72); }
+    else if (kind === 'bg') { const k = Math.min(1, 900 / b.width); c.width = Math.round(b.width * k); c.height = Math.round(b.height * k); x.drawImage(b, 0, 0, c.width, c.height); val = c.toDataURL('image/jpeg', .72); }
+    else { const W = 800, H = 250, k = Math.max(W / b.width, H / b.height), w = W / k, h = H / k; c.width = W; c.height = H; x.drawImage(b, (b.width - w) / 2, (b.height - h) / 2, w, h, 0, 0, W, H); val = c.toDataURL('image/jpeg', .75); }
   } catch (e) { return toast('圖片處理失敗，請換一張圖片再試', 1); }
-  if (await saveUi(kind, val)) toast('已更新，其他裝置重新整理後會套用');
+  if (await saveImg(kind, val)) toast(BK[kind] ? '橫幅已更新，共編者會一起看到' : '已更新，其他裝置重新整理後會套用');
 }
-async function resetImg(kind) { if (await saveUi(kind, null)) toast('已還原預設'); }
+async function resetImg(kind) { if (await saveImg(kind, null)) toast('已還原預設'); }
 function applyUI() {
   const i = ui('icon');
   $('#h-logo').innerHTML = i ? `<img src="${i}" class="w-full h-full object-cover">` : '<i class="fa-solid fa-wallet"></i>';
