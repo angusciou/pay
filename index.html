@@ -446,7 +446,7 @@ function imgRow(k, name, hint) {
 }
 function bannerBox(k, icon, grad, label) {
   const v = L[BK[k]] || '', btn = 'bg-black/45 text-white text-[10px] px-2 py-1 rounded-full backdrop-blur-sm cursor-pointer';
-  return `<div class="relative rounded-xl overflow-hidden border border-slate-200 shadow-sm h-24 ${v ? 'bg-slate-200' : 'bg-gradient-to-r ' + grad}">${v ? `<img src="${v}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center text-white/90 gap-2"><i class="fa-solid fa-${icon} text-xl"></i><span class="font-bold text-sm">${label}</span></div>`}
+  return `<div class="relative rounded-xl overflow-hidden border border-slate-200 shadow-sm ${v ? 'bg-slate-100' : 'h-24 bg-gradient-to-r ' + grad}">${v ? `<img src="${v}" alt="" aria-hidden="true" class="absolute inset-0 w-full h-full object-cover scale-125 blur-xl opacity-60"><img src="${v}" alt="橫幅" class="relative block mx-auto max-w-full" style="max-height:14rem">` : `<div class="w-full h-full flex items-center justify-center text-white/90 gap-2"><i class="fa-solid fa-${icon} text-xl"></i><span class="font-bold text-sm">${label}</span></div>`}
   <div class="absolute top-1.5 right-1.5 flex gap-1.5"><label class="${btn}"><i class="fa-solid fa-camera mr-1"></i>${v ? '更換' : '自訂圖片'}<input type="file" accept="image/*" class="hidden" onchange="pickImg('${k}',this.files[0]);this.value=''"></label>${v ? `<button class="${btn}" onclick="resetImg('${k}')"><i class="fa-solid fa-trash mr-1"></i>移除</button>` : ''}</div></div>`;
 }
 async function saveBanner(kind, val) {
@@ -467,7 +467,7 @@ async function pickImg(kind, file) {
     const b = await createImageBitmap(file), c = document.createElement('canvas'), x = c.getContext('2d');
     if (kind === 'icon') { const m = Math.min(b.width, b.height); c.width = c.height = 192; x.drawImage(b, (b.width - m) / 2, (b.height - m) / 2, m, m, 0, 0, 192, 192); val = c.toDataURL('image/png'); }
     else if (kind === 'bg') { const k = Math.min(1, 900 / b.width); c.width = Math.round(b.width * k); c.height = Math.round(b.height * k); x.drawImage(b, 0, 0, c.width, c.height); val = c.toDataURL('image/jpeg', .72); }
-    else { const W = 800, H = 250, k = Math.max(W / b.width, H / b.height), w = W / k, h = H / k; c.width = W; c.height = H; x.drawImage(b, (b.width - w) / 2, (b.height - h) / 2, w, h, 0, 0, W, H); val = c.toDataURL('image/jpeg', .75); }
+    else { const k = Math.min(1, 1000 / b.width, 700 / b.height); c.width = Math.round(b.width * k); c.height = Math.round(b.height * k); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(b, 0, 0, c.width, c.height); val = c.toDataURL('image/jpeg', .78); }
   } catch (e) { return toast('圖片處理失敗，請換一張圖片再試', 1); }
   if (await saveImg(kind, val)) toast(BK[kind] ? '橫幅已更新，共編者會一起看到' : '已更新，其他裝置重新整理後會套用');
 }
